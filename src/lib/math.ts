@@ -37,6 +37,19 @@ export function generateGateLine(path: Point[], index: number, widthMeters = 40)
   ];
 }
 
+// Great-circle distance between two lat/lon points, in meters
+export function haversineDistance(p1: Point, p2: Point): number {
+  const R = 6371000; // Earth radius in meters
+  const dLat = toRad(p2.lat - p1.lat);
+  const dLon = toRad(p2.lon - p1.lon);
+  const lat1 = toRad(p1.lat);
+  const lat2 = toRad(p2.lat);
+
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export function checkLineIntersection(p1: Point, p2: Point, gateA: Point, gateB: Point): number | null {
   const x1 = p1.lon; const y1 = p1.lat;
   const x2 = p2.lon; const y2 = p2.lat;

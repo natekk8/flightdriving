@@ -239,6 +239,15 @@ export default function RaceControl() {
             <span style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Kierowca</span>
             <span style={{ fontSize: '24px', fontWeight: 800, color: 'white' }}>{bestLap ? bestLap.driverName : 'Brak Czasu'}</span>
           </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Prędkość / G-Force</span>
+            <span className="font-digital" style={{ fontSize: '18px', color: 'var(--neon-green)' }}>
+              {activeDriverTelemetry ? Math.round(activeDriverTelemetry.speed) : 0} km/h
+              <span style={{ color: 'var(--neon-purple)', marginLeft: '12px' }}>
+                {(activeDriverTelemetry?.gForce || 0).toFixed(2)} G
+              </span>
+            </span>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', borderTop: '1px solid var(--card-border)', paddingTop: '16px' }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>S1</div>

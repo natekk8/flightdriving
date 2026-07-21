@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
-import { checkLineIntersection, generateGateLine, GPSKalmanFilter } from '../lib/math';
+import { checkLineIntersection, generateGateLine, GPSKalmanFilter, haversineDistance } from '../lib/math';
 import { initAudio, playF1StartBeep, playLapFinishBeep } from '../lib/audio';
 import { requestWakeLock, releaseWakeLock } from '../lib/wakelock';
 import L from 'leaflet';
@@ -79,7 +79,6 @@ export default function Cockpit() {
     setPhase('f1_lights');
     
     setS1Time(null); setS2Time(null); setS3Time(null);
-    setLights(0);
     maxSpeedRef.current = 0;
     lapStartTimeRef.current = null;
     lapStartTimeLocalRef.current = null;
@@ -106,14 +105,8 @@ export default function Cockpit() {
         clearInterval(interval);
         setTimeout(() => {
           playF1StartBeep(true);
-          setLights(-1);
-          // Start the lap clock exactly at "GO GO GO", independent of GPS fix timing
-          lapStartTimeRef.current = Date.now();
-          lapStartTimeLocalRef.current = performance.now();
-          setTimeout(() => {
-            setPhase('racing');
-            startGPS();
-          }, 300);
+          setPhase('racing');
+          startGPS();
         }, 500 + Math.random() * 1500);
       }
     }, 1000);
@@ -123,16 +116,6 @@ export default function Cockpit() {
     const track = tracks.find((t: any) => t._id === selectedTrack);
     if (!track || !track.path || track.path.length < 2) return;
 
-    // Send an initial telemetry snapshot right away so Control has a document
-    // to display before the first GPS fix arrives (which can take several seconds)
-    const startPt = track.path[0];
-    updateTelemetry({
-      driverName, vehicleType, trackId: track._id,
-      lat: startPt.lat, lon: startPt.lon,
-      speed: 0, heading: 0,
-      gForce: 0, timestamp: Date.now(),
-    }).catch(console.error);
-
     // Generate Gates
     const gates: [Point, Point][] = [];
     gates.push(generateGateLine(track.path, 0));
@@ -140,7 +123,7 @@ export default function Cockpit() {
     if (track.s2Index !== undefined) gates.push(generateGateLine(track.path, track.s2Index));
     gates.push(generateGateLine(track.path, track.path.length - 1));
 
-    let nextGateIndex = 1;
+    let nextGateIndex = 0;
     let sectorTimes: number[] = [];
 
     const filter = new GPSKalmanFilter();
@@ -153,19 +136,26 @@ export default function Cockpit() {
       (pos) => {
         const rawTime = pos.timestamp;
         const accuracy = pos.coords.accuracy;
-        const speedKmh = (pos.coords.speed || 0) * 3.6;
-        
-        if (lapStartTimeRef.current === null) {
-          lapStartTimeRef.current = rawTime;
-          lapStartTimeLocalRef.current = performance.now();
+
+        const filtered = filter.process(pos.coords.latitude, pos.coords.longitude, accuracy, rawTime);
+        const currentPoint: Point = { lat: filtered.lat, lon: filtered.lon };
+
+        // coords.speed is unreliable/null on many devices (esp. iOS/PWA) - fall back
+        // to computing speed from GPS distance/time when it isn't available.
+        let speedKmh: number;
+        if (pos.coords.speed !== null && pos.coords.speed !== undefined) {
+          speedKmh = pos.coords.speed * 3.6;
+        } else if (lastPoint && lastTime && rawTime > lastTime) {
+          const distanceMeters = haversineDistance(lastPoint, currentPoint);
+          const dtSeconds = (rawTime - lastTime) / 1000;
+          speedKmh = (distanceMeters / dtSeconds) * 3.6;
+        } else {
+          speedKmh = 0;
         }
 
         timeOffsetRef.current = Date.now() - rawTime;
         speedRef.current = speedKmh;
         if (speedKmh > maxSpeedRef.current) maxSpeedRef.current = speedKmh;
-
-        const filtered = filter.process(pos.coords.latitude, pos.coords.longitude, accuracy, rawTime);
-        const currentPoint: Point = { lat: filtered.lat, lon: filtered.lon };
 
         // Update Map Marker
         if (userMarker.current && leafletMap.current) {
@@ -385,7 +375,7 @@ export default function Cockpit() {
       )}
 
       {phase === 'f1_lights' && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', zIndex: 20 }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', zIndex: 10 }}>
           <div style={{ display: 'flex', gap: '16px', background: '#050505', padding: '24px', borderRadius: '16px', border: '1px solid #222' }}>
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: '#0a0a0a', borderRadius: '12px' }}>
@@ -420,50 +410,52 @@ export default function Cockpit() {
       </AnimatePresence>
 
       {/* Main OLED HUD Layer */}
-      <div style={{ zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '24px' }}>
-          <div>
-            <span style={{ color: 'var(--neon-green)', fontWeight: 800, fontSize: '24px', textShadow: '0 0 10px rgba(0,255,136,0.5)' }}>{driverName}</span>
-            <span style={{ color: '#aaa', marginLeft: '12px', fontSize: '14px', textTransform: 'uppercase' }}>{vehicleType}</span>
+      {phase === 'racing' && (
+        <div style={{ zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '24px' }}>
+            <div>
+              <span style={{ color: 'var(--neon-green)', fontWeight: 800, fontSize: '24px', textShadow: '0 0 10px rgba(0,255,136,0.5)' }}>{driverName}</span>
+              <span style={{ color: '#aaa', marginLeft: '12px', fontSize: '14px', textTransform: 'uppercase' }}>{vehicleType}</span>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '12px', color: 'var(--neon-blue)', fontWeight: 800 }}>LIVE LAP TIME</div>
+              <div ref={liveTimerRef} className="font-digital" style={{ fontSize: '32px', color: 'white', textShadow: '0 0 15px rgba(255,255,255,0.4)' }}></div>
+            </div>
+            <button className="btn-danger" onClick={abortRace} style={{ padding: '8px 16px', background: 'rgba(255,0,0,0.1)', border: '1px solid var(--neon-red)', color: 'white' }}>ZAKOŃCZ</button>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: 'var(--neon-blue)', fontWeight: 800 }}>LIVE LAP TIME</div>
-            <div ref={liveTimerRef} className="font-digital" style={{ fontSize: '32px', color: 'white', textShadow: '0 0 15px rgba(255,255,255,0.4)' }}></div>
-          </div>
-          <button className="btn-danger" onClick={abortRace} style={{ padding: '8px 16px', background: 'rgba(255,0,0,0.1)', border: '1px solid var(--neon-red)', color: 'white' }}>ZAKOŃCZ</button>
-        </div>
 
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-          <div ref={deltaElRef} className="font-digital" style={{ fontSize: '48px', height: '60px', opacity: 0.9 }}>
-            {/* Delta goes here */}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline' }}>
-            <div ref={speedElRef} className="font-digital" style={{ fontSize: '180px', color: 'white', lineHeight: 1, textShadow: '0 0 20px rgba(255,255,255,0.2)' }}></div>
-            <div style={{ color: '#aaa', fontSize: '32px', fontWeight: 800, marginLeft: '16px' }}>km/h</div>
-          </div>
-          
-          {/* G-Force RPM Bar */}
-          <div style={{ width: '80%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', marginTop: '32px', overflow: 'hidden' }}>
-            <div ref={gForceBarRef} style={{ height: '100%', width: '0%', background: 'var(--neon-purple)', transition: 'width 0.1s linear, background 0.2s' }} />
-          </div>
-          <div style={{ color: '#aaa', fontSize: '10px', marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>G-Force / Acceleration</div>
-        </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+            <div ref={deltaElRef} className="font-digital" style={{ fontSize: '48px', height: '60px', opacity: 0.9 }}>
+              {/* Delta goes here */}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline' }}>
+              <div ref={speedElRef} className="font-digital" style={{ fontSize: '180px', color: 'white', lineHeight: 1, textShadow: '0 0 20px rgba(255,255,255,0.2)' }}></div>
+              <div style={{ color: '#aaa', fontSize: '32px', fontWeight: 800, marginLeft: '16px' }}>km/h</div>
+            </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2px', background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)' }}>
-          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '24px', textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: '#888', fontWeight: 800, marginBottom: '8px' }}>SEKTOR 1</div>
-            <div className="font-digital" style={{ fontSize: '28px', color: s1Time ? 'white' : '#555' }}>{s1Time ? (s1Time/1000).toFixed(3) : '--.---'}</div>
+            {/* G-Force RPM Bar */}
+            <div style={{ width: '80%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', marginTop: '32px', overflow: 'hidden' }}>
+              <div ref={gForceBarRef} style={{ height: '100%', width: '0%', background: 'var(--neon-purple)', transition: 'width 0.1s linear, background 0.2s' }} />
+            </div>
+            <div style={{ color: '#aaa', fontSize: '10px', marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>G-Force / Acceleration</div>
           </div>
-          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '24px', textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: '#888', fontWeight: 800, marginBottom: '8px' }}>SEKTOR 2</div>
-            <div className="font-digital" style={{ fontSize: '28px', color: s2Time ? 'white' : '#555' }}>{s2Time ? (s2Time/1000).toFixed(3) : '--.---'}</div>
-          </div>
-          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '24px', textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: '#888', fontWeight: 800, marginBottom: '8px' }}>SEKTOR 3 (LAP)</div>
-            <div className="font-digital" style={{ fontSize: '28px', color: s3Time ? 'var(--neon-purple)' : '#555' }}>{s3Time ? (s3Time/1000).toFixed(3) : '--.---'}</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2px', background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)' }}>
+            <div style={{ background: 'rgba(0,0,0,0.5)', padding: '24px', textAlign: 'center' }}>
+              <div style={{ fontSize: '12px', color: '#888', fontWeight: 800, marginBottom: '8px' }}>SEKTOR 1</div>
+              <div className="font-digital" style={{ fontSize: '28px', color: s1Time ? 'white' : '#555' }}>{s1Time ? (s1Time/1000).toFixed(3) : '--.---'}</div>
+            </div>
+            <div style={{ background: 'rgba(0,0,0,0.5)', padding: '24px', textAlign: 'center' }}>
+              <div style={{ fontSize: '12px', color: '#888', fontWeight: 800, marginBottom: '8px' }}>SEKTOR 2</div>
+              <div className="font-digital" style={{ fontSize: '28px', color: s2Time ? 'white' : '#555' }}>{s2Time ? (s2Time/1000).toFixed(3) : '--.---'}</div>
+            </div>
+            <div style={{ background: 'rgba(0,0,0,0.5)', padding: '24px', textAlign: 'center' }}>
+              <div style={{ fontSize: '12px', color: '#888', fontWeight: 800, marginBottom: '8px' }}>SEKTOR 3 (LAP)</div>
+              <div className="font-digital" style={{ fontSize: '28px', color: s3Time ? 'var(--neon-purple)' : '#555' }}>{s3Time ? (s3Time/1000).toFixed(3) : '--.---'}</div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
