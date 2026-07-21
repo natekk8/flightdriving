@@ -85,6 +85,8 @@ export default function Cockpit() {
   // @ts-ignore
   const updateTelemetry = useMutation(api.telemetry.update);
   // @ts-ignore
+  const clearDriverTelemetry = useMutation(api.telemetry.clearDriver);
+  // @ts-ignore
   const recordLap = useMutation(api.laps.record);
 
   const mapRef = useRef<HTMLDivElement>(null);
@@ -391,10 +393,28 @@ export default function Cockpit() {
   const abortRace = () => {
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
     if (motionHandlerRef.current) window.removeEventListener('devicemotion', motionHandlerRef.current);
+    if (orientationHandlerRef.current) window.removeEventListener('deviceorientation', orientationHandlerRef.current);
+    
+    // Remove active telemetry for this driver immediately so they disappear from Race Control dashboard
+    if (driverName) {
+      clearDriverTelemetry({ driverName }).catch(console.error);
+    }
+
+    // Flush any pending completed laps queue
+    flushLapQueue(recordLap).catch(console.error);
+
     releaseWakeLock();
     setPhase('setup');
     setLights(0);
     setGpsError(null);
+
+    // Reset timing refs
+    lapStartTimeRef.current = null;
+    lapStartTimeLocalRef.current = null;
+    setS1Time(null);
+    setS2Time(null);
+    setS3Time(null);
+
     navigate('/control', { state: { trackId: selectedTrack } });
   };
 

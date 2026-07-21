@@ -54,3 +54,19 @@ export const clearAll = mutation({
   },
 });
 
+export const clearDriver = mutation({
+  args: {
+    driverName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("telemetry")
+      .withIndex("by_driverName", (q) => q.eq("driverName", args.driverName))
+      .collect();
+
+    for (const doc of existing) {
+      await ctx.db.delete(doc._id);
+    }
+  },
+});
+
