@@ -104,12 +104,9 @@ export default function Cockpit() {
       } else {
         clearInterval(interval);
         setTimeout(() => {
-          setLights(-1);
           playF1StartBeep(true);
-          setTimeout(() => {
-            setPhase('racing');
-            startGPS();
-          }, 1000);
+          setPhase('racing');
+          startGPS();
         }, 500 + Math.random() * 1500);
       }
     }, 1000);
@@ -126,8 +123,11 @@ export default function Cockpit() {
     if (track.s2Index !== undefined) gates.push(generateGateLine(track.path, track.s2Index));
     gates.push(generateGateLine(track.path, track.path.length - 1));
 
-    let nextGateIndex = 0;
+    let nextGateIndex = 1;
     let sectorTimes: number[] = [];
+
+    lapStartTimeRef.current = Date.now();
+    lapStartTimeLocalRef.current = performance.now();
 
     const filter = new GPSKalmanFilter();
     let lastPoint: Point | null = null;
@@ -225,7 +225,7 @@ export default function Cockpit() {
         lastTime = rawTime;
       },
       (err) => console.error(err),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
   };
 
