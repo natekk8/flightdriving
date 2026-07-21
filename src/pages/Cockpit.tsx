@@ -79,6 +79,7 @@ export default function Cockpit() {
     setPhase('f1_lights');
     
     setS1Time(null); setS2Time(null); setS3Time(null);
+    setLights(0);
     maxSpeedRef.current = 0;
     lapStartTimeRef.current = null;
     lapStartTimeLocalRef.current = null;
@@ -105,8 +106,14 @@ export default function Cockpit() {
         clearInterval(interval);
         setTimeout(() => {
           playF1StartBeep(true);
-          setPhase('racing');
-          startGPS();
+          setLights(-1);
+          // Start the lap clock exactly at "GO GO GO", independent of GPS fix timing
+          lapStartTimeRef.current = Date.now();
+          lapStartTimeLocalRef.current = performance.now();
+          setTimeout(() => {
+            setPhase('racing');
+            startGPS();
+          }, 300);
         }, 500 + Math.random() * 1500);
       }
     }, 1000);
@@ -115,6 +122,16 @@ export default function Cockpit() {
   const startGPS = () => {
     const track = tracks.find((t: any) => t._id === selectedTrack);
     if (!track || !track.path || track.path.length < 2) return;
+
+    // Send an initial telemetry snapshot right away so Control has a document
+    // to display before the first GPS fix arrives (which can take several seconds)
+    const startPt = track.path[0];
+    updateTelemetry({
+      driverName, vehicleType, trackId: track._id,
+      lat: startPt.lat, lon: startPt.lon,
+      speed: 0, heading: 0,
+      gForce: 0, timestamp: Date.now(),
+    }).catch(console.error);
 
     // Generate Gates
     const gates: [Point, Point][] = [];
@@ -368,7 +385,7 @@ export default function Cockpit() {
       )}
 
       {phase === 'f1_lights' && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', zIndex: 10 }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', zIndex: 20 }}>
           <div style={{ display: 'flex', gap: '16px', background: '#050505', padding: '24px', borderRadius: '16px', border: '1px solid #222' }}>
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: '#0a0a0a', borderRadius: '12px' }}>
