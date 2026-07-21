@@ -23,6 +23,8 @@ export default function Cockpit() {
   // Validation errors
   const [errorName, setErrorName] = useState(false);
   const [errorTrack, setErrorTrack] = useState(false);
+  const [trackConfigError, setTrackConfigError] = useState<string | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
 
   // Real-time state (avoids React re-renders via refs)
   const speedRef = useRef(0);
@@ -65,6 +67,25 @@ export default function Cockpit() {
 
   const bestLap = [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime)[0];
 
+  // Validates that the selected track has a usable path and, if defined,
+  // sector gates in sane positions before a race is allowed to start.
+  const validateTrackConfig = (track: any): string | null => {
+    if (!track || !track.path || track.path.length < 2) {
+      return 'Ta trasa nie ma poprawnie zdefiniowanej ścieżki (min. 2 punkty). Popraw ją w Ustawieniach Trasy.';
+    }
+    const lastIndex = track.path.length - 1;
+    if (track.s1Index !== undefined && (track.s1Index <= 0 || track.s1Index >= lastIndex)) {
+      return 'Punkt sektora S1 tej trasy jest poza zakresem ścieżki. Popraw go w Ustawieniach Trasy.';
+    }
+    if (track.s2Index !== undefined && (track.s2Index <= 0 || track.s2Index >= lastIndex)) {
+      return 'Punkt sektora S2 tej trasy jest poza zakresem ścieżki. Popraw go w Ustawieniach Trasy.';
+    }
+    if (track.s1Index !== undefined && track.s2Index !== undefined && track.s1Index >= track.s2Index) {
+      return 'Sektor S1 musi znajdować się przed sektorem S2 na trasie. Popraw ją w Ustawieniach Trasy.';
+    }
+    return null;
+  };
+
   const startRace = async () => {
     let hasError = false;
     if (!driverName) { setErrorName(true); hasError = true; }
@@ -73,6 +94,17 @@ export default function Cockpit() {
       setTimeout(() => { setErrorName(false); setErrorTrack(false); }, 500);
       return;
     }
+
+    const track = tracks.find((t: any) => t._id === selectedTrack);
+    const configError = validateTrackConfig(track);
+    if (configError) {
+      setErrorTrack(true);
+      setTrackConfigError(configError);
+      setTimeout(() => setErrorTrack(false), 500);
+      return;
+    }
+    setTrackConfigError(null);
+    setGpsError(null);
 
     initAudio();
     await requestWakeLock();
@@ -134,10 +166,11 @@ export default function Cockpit() {
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        setGpsError(null);
         const rawTime = pos.timestamp;
         const accuracy = pos.coords.accuracy;
         const speedKmh = (pos.coords.speed || 0) * 3.6;
-        
+
         if (lapStartTimeRef.current === null) {
           lapStartTimeRef.current = rawTime;
           lapStartTimeLocalRef.current = performance.now();
@@ -226,7 +259,15 @@ export default function Cockpit() {
         lastPoint = currentPoint;
         lastTime = rawTime;
       },
-      (err) => console.error(err),
+      (err) => {
+        console.error(err);
+        const messages: Record<number, string> = {
+          1: 'Brak dostępu do lokalizacji. Zezwól na GPS w ustawieniach przeglądarki/telefonu i spróbuj ponownie.',
+          2: 'Nie można ustalić pozycji GPS. Sprawdź sygnał GPS i połączenie.',
+          3: 'Przekroczono czas oczekiwania na sygnał GPS.',
+        };
+        setGpsError(messages[err.code] || 'Błąd GPS — sprawdź uprawnienia lokalizacji.');
+      },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
   };
@@ -237,6 +278,7 @@ export default function Cockpit() {
     releaseWakeLock();
     setPhase('setup');
     setLights(0);
+    setGpsError(null);
     navigate('/control', { state: { trackId: selectedTrack } });
   };
 
@@ -346,6 +388,9 @@ export default function Cockpit() {
               <option value="">Wybierz...</option>
               {tracks.map((t: any) => <option key={t._id} value={t._id}>{t.name}</option>)}
             </select>
+            {trackConfigError && (
+              <div style={{ color: 'var(--neon-red)', fontSize: '12px', marginTop: '8px' }}>{trackConfigError}</div>
+            )}
           </motion.div>
 
           <button className="btn-primary" style={{ marginTop: '16px', width: '100%' }} onClick={startRace}>
@@ -398,6 +443,24 @@ export default function Cockpit() {
             <h1 style={{ fontSize: '120px', color: 'white', textShadow: '0 0 40px var(--neon-green)', fontWeight: 900, fontStyle: 'italic' }}>
               META
             </h1>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {gpsError && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            style={{
+              position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)',
+              zIndex: 10002, background: 'rgba(200, 0, 0, 0.9)', color: 'white',
+              padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 700,
+              maxWidth: '90%', textAlign: 'center', boxShadow: '0 0 20px rgba(255,0,0,0.5)'
+            }}
+          >
+            {gpsError}
           </motion.div>
         )}
       </AnimatePresence>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flightdriving-v1';
+const CACHE_NAME = 'flightdriving-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -29,15 +29,25 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Network-first: always try to fetch the freshest version from the network
+// first, and only fall back to the cache when offline. This prevents a
+// stale build (old HTML/JS) from being served indefinitely after a deploy,
+// which previously required users to manually clear PWA/site data.
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request).catch(() => {
-        // Return offline fallback if network fails
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
-        }
-      });
-    })
+    fetch(event.request)
+      .then((response) => {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+        return response;
+      })
+      .catch(() =>
+        caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          if (event.request.mode === 'navigate') return caches.match('/index.html');
+        })
+      )
   );
 });
