@@ -3,15 +3,17 @@ import { useMutation, useQuery } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
 import { checkLineIntersection, generateGateLine, GPSKalmanFilter } from '../lib/math';
-import { initAudio, playF1StartBeep, playDeltaBeep } from '../lib/audio';
+import { initAudio, playF1StartBeep, playLapFinishBeep } from '../lib/audio';
 import { requestWakeLock, releaseWakeLock } from '../lib/wakelock';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 type Point = { lat: number; lon: number };
 
 export default function Cockpit() {
+  const navigate = useNavigate();
   const [phase, setPhase] = useState<'setup' | 'f1_lights' | 'racing'>('setup');
   const [driverName, setDriverName] = useState('');
   const [vehicleType, setVehicleType] = useState<'scooter' | 'bike'>('scooter');
@@ -29,12 +31,13 @@ export default function Cockpit() {
   const gForceRef = useRef(0);
   const lapStartTimeRef = useRef<number | null>(null);
   const lapNumberRef = useRef<number>(1);
-  const lastTimeRef = useRef<number>(0); // For live timer to keep running smoothly
+  const timeOffsetRef = useRef<number>(0);
 
   // Timing state
   const [s1Time, setS1Time] = useState<number | null>(null);
   const [s2Time, setS2Time] = useState<number | null>(null);
   const [s3Time, setS3Time] = useState<number | null>(null);
+  const [lapFlash, setLapFlash] = useState(false);
 
   // UI elements for rAF loop
   const speedElRef = useRef<HTMLDivElement>(null);
@@ -136,13 +139,12 @@ export default function Cockpit() {
         const accuracy = pos.coords.accuracy;
         const speedKmh = (pos.coords.speed || 0) * 3.6;
         
+        timeOffsetRef.current = Date.now() - rawTime;
         speedRef.current = speedKmh;
         if (speedKmh > maxSpeedRef.current) maxSpeedRef.current = speedKmh;
 
         const filtered = filter.process(pos.coords.latitude, pos.coords.longitude, accuracy, rawTime);
         const currentPoint: Point = { lat: filtered.lat, lon: filtered.lon };
-
-        lastTimeRef.current = Date.now(); // For live timer rendering
 
         // Update Map Marker
         if (userMarker.current && leafletMap.current) {
@@ -187,11 +189,13 @@ export default function Cockpit() {
                 if (bestLap) {
                   const delta = totalTime - bestLap.lapTime;
                   deltaRef.current = delta;
-                  playDeltaBeep(delta < 0);
                 } else {
-                  playDeltaBeep(true);
                   deltaRef.current = -1;
                 }
+
+                playLapFinishBeep();
+                setLapFlash(true);
+                setTimeout(() => setLapFlash(false), 2000);
 
                 recordLap({
                   driverName, vehicleType, trackId: track._id,
@@ -227,6 +231,7 @@ export default function Cockpit() {
     releaseWakeLock();
     setPhase('setup');
     setLights(0);
+    navigate('/control', { state: { trackId: selectedTrack } });
   };
 
   // 60FPS UI rendering
@@ -251,7 +256,7 @@ export default function Cockpit() {
       if (liveTimerRef.current) {
         if (lapStartTimeRef.current) {
           // Calculate elapsed strictly using current time minus exact lap start
-          const elapsed = Date.now() - lapStartTimeRef.current;
+          const elapsed = (Date.now() - timeOffsetRef.current) - lapStartTimeRef.current;
           liveTimerRef.current.innerText = (elapsed / 1000).toFixed(3);
         } else {
           liveTimerRef.current.innerText = '0.000';
@@ -372,6 +377,25 @@ export default function Cockpit() {
         </div>
       )}
 
+      <AnimatePresence>
+        {lapFlash && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.2 }}
+            style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0, 255, 136, 0.2)', zIndex: 10001, pointerEvents: 'none'
+            }}
+          >
+            <h1 style={{ fontSize: '120px', color: 'white', textShadow: '0 0 40px var(--neon-green)', fontWeight: 900, fontStyle: 'italic' }}>
+              META
+            </h1>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Main OLED HUD Layer */}
       <div style={{ zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '24px' }}>
@@ -381,7 +405,7 @@ export default function Cockpit() {
           </div>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '12px', color: 'var(--neon-blue)', fontWeight: 800 }}>LIVE LAP TIME</div>
-            <div ref={liveTimerRef} className="font-digital" style={{ fontSize: '32px', color: 'white', textShadow: '0 0 15px rgba(255,255,255,0.4)' }}>0.000</div>
+            <div ref={liveTimerRef} className="font-digital" style={{ fontSize: '32px', color: 'white', textShadow: '0 0 15px rgba(255,255,255,0.4)' }}></div>
           </div>
           <button className="btn-danger" onClick={abortRace} style={{ padding: '8px 16px', background: 'rgba(255,0,0,0.1)', border: '1px solid var(--neon-red)', color: 'white' }}>ZAKOŃCZ</button>
         </div>
@@ -391,7 +415,7 @@ export default function Cockpit() {
             {/* Delta goes here */}
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline' }}>
-            <div ref={speedElRef} className="font-digital" style={{ fontSize: '180px', color: 'white', lineHeight: 1, textShadow: '0 0 20px rgba(255,255,255,0.2)' }}>0</div>
+            <div ref={speedElRef} className="font-digital" style={{ fontSize: '180px', color: 'white', lineHeight: 1, textShadow: '0 0 20px rgba(255,255,255,0.2)' }}></div>
             <div style={{ color: '#aaa', fontSize: '32px', fontWeight: 800, marginLeft: '16px' }}>km/h</div>
           </div>
           

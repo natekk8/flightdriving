@@ -48,3 +48,10 @@ export function playDeltaBeep(isFaster: boolean) {
     if (navigator.vibrate) navigator.vibrate(300);
   }
 }
+
+export function playLapFinishBeep() {
+  playBeep(600, 200, 'sine', 0.8);
+  setTimeout(() => playBeep(800, 200, 'sine', 0.8), 200);
+  setTimeout(() => playBeep(1200, 400, 'sine', 0.8), 400);
+  if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+}
