@@ -525,38 +525,80 @@ export default function Cockpit() {
 
   if (phase === 'setup') {
     return (
-      <div className="glass-panel" style={{ maxWidth: '500px', margin: '40px auto', padding: '32px' }}>
-        <h2 style={{ marginBottom: '8px', borderLeft: '4px solid var(--neon-red)', paddingLeft: '12px' }}>Cockpit (F1 Edition)</h2>
-        <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '14px' }}>
-          Zainstaluj telefon stabilnie w uchwycie przed startem.
-        </p>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-panel" 
+        style={{ maxWidth: '520px', margin: '40px auto', padding: '36px', borderTop: '4px solid var(--f1-red)', boxShadow: '0 20px 50px rgba(0,0,0,0.8)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase', color: '#fff' }}>
+              <span style={{ color: 'var(--f1-red)' }}>F1</span> COCKPIT SETUP
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '13px' }}>
+              Skonfiguruj sesję telemetryczną przed zamontowaniem urządzenia.
+            </p>
+          </div>
+          <div style={{ padding: '6px 12px', background: 'rgba(225, 6, 0, 0.15)', border: '1px solid var(--f1-red)', borderRadius: '8px', color: 'var(--f1-red)', fontSize: '11px', fontWeight: 800 }}>
+            READY
+          </div>
+        </div>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '24px' }}>
           <motion.div animate={errorName ? { x: [-10, 10, -10, 10, 0] } : {}} transition={{ duration: 0.4 }}>
-            <label htmlFor="driverName" style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: errorName ? 'var(--neon-red)' : 'var(--text-secondary)', textTransform: 'uppercase' }}>
-              Imię Kierowcy {errorName && ' (WYMAGANE)'}
+            <label htmlFor="driverName" style={{ display: 'block', marginBottom: '8px', fontSize: '11px', fontWeight: 800, color: errorName ? 'var(--neon-red)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              🏎️ Imię / Alias Kierowcy {errorName && ' (WYMAGANE)'}
             </label>
             <input 
               id="driverName"
               className="custom-input" 
               style={{ borderColor: errorName ? 'var(--neon-red)' : undefined }}
-              placeholder="Wpisz imię..." 
+              placeholder="Wpisz np. Max Verstappen..." 
               value={driverName} 
               onChange={e => setDriverName(e.target.value)} 
             />
           </motion.div>
           
           <div>
-            <label htmlFor="vehicleType" style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Pojazd</label>
-            <select id="vehicleType" className="custom-select" value={vehicleType} onChange={(e: any) => setVehicleType(e.target.value)}>
-              <option value="scooter">Hulajnoga</option>
-              <option value="bike">Rower</option>
-            </select>
+            <label htmlFor="vehicleType" style={{ display: 'block', marginBottom: '8px', fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              ⚡ Typ Pojazdu
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{
+                  padding: '14px',
+                  background: vehicleType === 'scooter' ? 'rgba(0, 240, 255, 0.18)' : 'rgba(255,255,255,0.04)',
+                  borderColor: vehicleType === 'scooter' ? 'var(--neon-cyan)' : 'rgba(255,255,255,0.12)',
+                  color: vehicleType === 'scooter' ? '#fff' : 'var(--text-secondary)',
+                  fontWeight: 700
+                }}
+                onClick={() => setVehicleType('scooter')}
+              >
+                🛵 HULAJNOGA
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{
+                  padding: '14px',
+                  background: vehicleType === 'bike' ? 'rgba(57, 255, 20, 0.18)' : 'rgba(255,255,255,0.04)',
+                  borderColor: vehicleType === 'bike' ? 'var(--neon-green)' : 'rgba(255,255,255,0.12)',
+                  color: vehicleType === 'bike' ? '#fff' : 'var(--text-secondary)',
+                  fontWeight: 700
+                }}
+                onClick={() => setVehicleType('bike')}
+              >
+                🚴 ROWER
+              </button>
+            </div>
           </div>
           
           <motion.div animate={errorTrack ? { x: [-10, 10, -10, 10, 0] } : {}} transition={{ duration: 0.4 }}>
-            <label htmlFor="trackSelect" style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: errorTrack ? 'var(--neon-red)' : 'var(--text-secondary)', textTransform: 'uppercase' }}>
-              Wybierz Trasę {errorTrack && ' (WYMAGANE)'}
+            <label htmlFor="trackSelect" style={{ display: 'block', marginBottom: '8px', fontSize: '11px', fontWeight: 800, color: errorTrack ? 'var(--neon-red)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              🏁 Wybierz Tor Wyścigowy {errorTrack && ' (WYMAGANE)'}
             </label>
             <select 
               id="trackSelect"
@@ -565,19 +607,19 @@ export default function Cockpit() {
               value={selectedTrack} 
               onChange={(e) => setSelectedTrack(e.target.value)}
             >
-              <option value="">Wybierz...</option>
+              <option value="">Wybierz trasy wyścigowe...</option>
               {tracks.map((t: any) => <option key={t._id} value={t._id}>{t.name}</option>)}
             </select>
             {trackConfigError && (
-              <div style={{ color: 'var(--neon-red)', fontSize: '12px', marginTop: '8px' }}>{trackConfigError}</div>
+              <div style={{ color: 'var(--neon-red)', fontSize: '12px', marginTop: '8px', fontWeight: 600 }}>⚠️ {trackConfigError}</div>
             )}
           </motion.div>
 
-          <button className="btn-primary" style={{ marginTop: '16px', width: '100%' }} onClick={startRace}>
-            ROZPOCZNIJ SEKWENCJĘ STARTOWĄ
+          <button className="btn-primary" style={{ marginTop: '12px', width: '100%', padding: '18px' }} onClick={startRace}>
+            🟢 ROZPOCZNIJ SEKWENCJĘ STARTOWĄ (LIGHTS)
           </button>
         </div>
-      </div>
+      </motion.div>
     );
   }
 

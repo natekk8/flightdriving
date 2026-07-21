@@ -317,45 +317,73 @@ export default function RaceControl() {
         )}
       </AnimatePresence>
 
-      {/* Top Controls */}
-      <div className="glass-panel" style={{ display: 'flex', gap: '16px', marginBottom: '24px', padding: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <h2 style={{ margin: 0, borderLeft: '4px solid var(--neon-blue)', paddingLeft: '12px' }}>RACE CONTROL MENU</h2>
-        <select className="custom-select" style={{ width: '200px', transform: 'skewX(-12deg)' }} value={activeTab} onChange={e => setActiveTab(e.target.value as any)}>
-          <option value="scooter">Wyniki: HULAJNOGI</option>
-          <option value="bike">Wyniki: ROWERY</option>
+      {/* Top Controls Bar */}
+      <motion.div 
+        initial={{ opacity: 0, y: -15 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-panel" 
+        style={{ display: 'flex', gap: '16px', marginBottom: '24px', padding: '16px 24px', flexWrap: 'wrap', alignItems: 'center', borderTop: '2px solid var(--f1-red)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '8px', height: '24px', background: 'var(--f1-red)', borderRadius: '2px' }} />
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase' }}>RACE CONTROL PIT WALL</h2>
+        </div>
+
+        <select className="custom-select" style={{ width: '210px' }} value={activeTab} onChange={e => setActiveTab(e.target.value as any)}>
+          <option value="scooter">🛵 Wyniki: HULAJNOGI</option>
+          <option value="bike">🚴 Wyniki: ROWERY</option>
         </select>
-        <select className="custom-select" style={{ width: '260px', transform: 'skewX(-12deg)' }} value={selectedTrack} onChange={e => setSelectedTrack(e.target.value)}>
+
+        <select className="custom-select" style={{ width: '260px' }} value={selectedTrack} onChange={e => setSelectedTrack(e.target.value)}>
           <option value="">-- Wybierz Trasę --</option>
           {tracks.map((t: any) => <option key={t._id} value={t._id}>{t.name}</option>)}
         </select>
 
         {/* Feature Toggles */}
         <button 
-          className="btn-primary" 
-          style={{ transform: 'skewX(-12deg)', background: showHeatmap ? 'var(--neon-red)' : 'rgba(255,255,255,0.1)' }}
+          className="btn-secondary" 
+          style={{
+            background: showHeatmap ? 'rgba(243, 18, 60, 0.2)' : 'rgba(255,255,255,0.05)',
+            borderColor: showHeatmap ? 'var(--neon-red)' : 'rgba(255,255,255,0.15)',
+            color: showHeatmap ? '#fff' : 'var(--text-secondary)'
+          }}
           onClick={() => setShowHeatmap(!showHeatmap)}
         >
-          {showHeatmap ? '🔥 HEATMAPA HAMOWANIA: WŁ' : '🔥 HEATMAPA HAMOWANIA: WYŁ'}
+          {showHeatmap ? '🔥 HEATMAPA: WŁ' : '🔥 HEATMAPA: WYŁ'}
         </button>
 
         <button 
-          className="btn-primary" 
-          style={{ transform: 'skewX(-12deg)', background: showCompareModal ? 'var(--neon-purple)' : 'rgba(255,255,255,0.1)' }}
+          className="btn-secondary" 
+          style={{
+            background: showCompareModal ? 'rgba(176, 0, 255, 0.2)' : 'rgba(255,255,255,0.05)',
+            borderColor: showCompareModal ? 'var(--neon-purple)' : 'rgba(255,255,255,0.15)',
+            color: showCompareModal ? '#fff' : 'var(--text-secondary)'
+          }}
           onClick={() => setShowCompareModal(!showCompareModal)}
         >
-          📊 PORÓWNAJ 2 KIEROWCÓW
+          📊 PORÓWNAJ KIEROWCÓW
         </button>
 
         <button 
-          className="btn-primary" 
-          style={{ transform: 'skewX(-12deg)', background: isReplaying ? 'var(--neon-green)' : 'rgba(255,255,255,0.1)' }}
+          className="btn-secondary" 
+          style={{
+            background: isReplaying ? 'rgba(57, 255, 20, 0.2)' : 'rgba(255,255,255,0.05)',
+            borderColor: isReplaying ? 'var(--neon-green)' : 'rgba(255,255,255,0.15)',
+            color: isReplaying ? '#fff' : 'var(--text-secondary)'
+          }}
           onClick={() => setIsReplaying(!isReplaying)}
         >
           {isReplaying ? '⏸️ PAUZA REPLAY' : '▶️ ODTWÓRZ SESJĘ'}
         </button>
 
-        <button className="btn-danger" style={{ transform: 'skewX(-12deg)', marginLeft: 'auto' }} onClick={() => { if (window.confirm('Czy na pewno chcesz zresetować wyniki dla tej trasy? (Tej akcji nie można cofnąć)')) { clearBoard({ trackId: selectedTrack || undefined }); } }}>Reset Wyników</button>
-      </div>
+        <button 
+          className="btn-danger" 
+          style={{ marginLeft: 'auto' }} 
+          onClick={() => { if (window.confirm('Czy na pewno chcesz zresetować wyniki dla tej trasy? (Tej akcji nie można cofnąć)')) { clearBoard({ trackId: selectedTrack || undefined }); } }}
+        >
+          Reset Wyników
+        </button>
+      </motion.div>
 
       {/* Interactive Session Replay Scrubber Bar */}
       {isReplaying && (

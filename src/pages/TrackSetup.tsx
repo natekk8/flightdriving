@@ -312,7 +312,10 @@ export default function TrackSetup() {
         }}
       >
         <div>
-          <h2 style={{ margin: 0, borderLeft: '4px solid var(--neon-purple)', paddingLeft: '12px', fontSize: '18px', textTransform: 'uppercase' }}>Kreator Tras F1</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <span style={{ background: 'var(--f1-red)', color: '#fff', fontSize: '10px', fontWeight: 900, padding: '2px 6px', borderRadius: '4px', transform: 'skew(-10deg)' }}>CAD</span>
+            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px' }}>KREATOR TRAS F1</h2>
+          </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '6px' }}>
             Rysuj tor, a następnie jednym kliknięciem przypinaj precyzyjnie sektory do wyrysowanej linii wyścigowej.
           </p>
