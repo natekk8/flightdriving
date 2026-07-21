@@ -32,6 +32,7 @@ export default function Cockpit() {
   const lapStartTimeRef = useRef<number | null>(null);
   const lapNumberRef = useRef<number>(1);
   const timeOffsetRef = useRef<number>(0);
+  const lapStartTimeLocalRef = useRef<number | null>(null);
 
   // Timing state
   const [s1Time, setS1Time] = useState<number | null>(null);
@@ -80,6 +81,7 @@ export default function Cockpit() {
     setS1Time(null); setS2Time(null); setS3Time(null);
     maxSpeedRef.current = 0;
     lapStartTimeRef.current = null;
+    lapStartTimeLocalRef.current = null;
     lapNumberRef.current = 1;
     
     if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
@@ -172,6 +174,7 @@ export default function Cockpit() {
             
             if (nextGateIndex === 0) {
               lapStartTimeRef.current = exactTimestamp;
+              lapStartTimeLocalRef.current = Date.now();
               nextGateIndex++;
             } else if (lapStartTimeRef.current !== null) {
               const elapsed = exactTimestamp - lapStartTimeRef.current;
@@ -209,6 +212,7 @@ export default function Cockpit() {
                 lapNumberRef.current++;
                 nextGateIndex = 1; 
                 lapStartTimeRef.current = exactTimestamp;
+                lapStartTimeLocalRef.current = Date.now();
                 sectorTimes = [];
               } else {
                 nextGateIndex++;
@@ -254,9 +258,9 @@ export default function Cockpit() {
         gForceBarRef.current.style.background = pct > 80 ? 'var(--neon-red)' : 'var(--neon-purple)';
       }
       if (liveTimerRef.current) {
-        if (lapStartTimeRef.current) {
-          // Calculate elapsed strictly using current time minus exact lap start
-          const elapsed = (Date.now() - timeOffsetRef.current) - lapStartTimeRef.current;
+        if (lapStartTimeLocalRef.current) {
+          // Use purely local time difference for visual smoothness to avoid micro-stutters
+          const elapsed = Date.now() - lapStartTimeLocalRef.current;
           liveTimerRef.current.innerText = (elapsed / 1000).toFixed(3);
         } else {
           liveTimerRef.current.innerText = '0.000';
