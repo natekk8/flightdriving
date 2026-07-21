@@ -177,7 +177,15 @@ export default function RaceControl() {
 
   const sortedLaps = [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime);
   const bestLap = sortedLaps[0];
-  const activeDriverTelemetry = telemetry.find((t: any) => t.vehicleType === activeTab && t.driverName === bestLap?.driverName);
+  // Vehicle status must not depend on someone having completed a full lap -
+  // fall back to any recently active driver in this category so speed/G-force
+  // still show up before the first lap/sector time is recorded.
+  const activeTelemetryNow = telemetry.filter((t: any) =>
+    t.vehicleType === activeTab && (Date.now() - (t.timestamp || 0) < 15000)
+  );
+  const activeDriverTelemetry =
+    activeTelemetryNow.find((t: any) => t.driverName === bestLap?.driverName) ||
+    activeTelemetryNow[0];
 
   return (
     <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', position: 'relative' }}>
@@ -263,7 +271,7 @@ export default function RaceControl() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Aktualna prędkość (Lider)</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Aktualna prędkość{bestLap ? ' (Lider)' : ''}</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
                 <span className="font-digital" style={{ fontSize: '64px', color: 'var(--neon-green)', textShadow: '0 0 20px rgba(0,255,136,0.4)' }}>
                   {activeDriverTelemetry ? Math.round(activeDriverTelemetry.speed) : 0}
