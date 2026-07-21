@@ -126,10 +126,12 @@ export default function Cockpit() {
     let nextGateIndex = 1;
     let sectorTimes: number[] = [];
 
-    lapStartTimeRef.current = Date.now();
-    lapStartTimeLocalRef.current = performance.now();
+    if (lapStartTimeRef.current === null) {
+      lapStartTimeRef.current = rawTime;
+      lapStartTimeLocalRef.current = performance.now();
+    }
 
-    const filter = new GPSKalmanFilter();
+const filter = new GPSKalmanFilter();
     let lastPoint: Point | null = null;
     let lastTime = 0;
     let lastTelemetryTime = 0;
