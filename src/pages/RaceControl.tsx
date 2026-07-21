@@ -653,28 +653,21 @@ export default function RaceControl() {
                   );
                 })}
               </AnimatePresence>
-              <AnimatePresence>
-                {inProgressDrivers.map((t: any) => (
-                  <motion.tr
-                    key={`in-progress-${t._id}`}
-                    layout
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                    style={{ background: 'rgba(0, 240, 255, 0.05)' }}
-                  >
-                    <td style={{ color: 'var(--text-secondary)', fontWeight: 900, fontSize: '18px' }}>—</td>
-                    <td style={{ fontWeight: 800, fontSize: '16px', color: 'white' }}>{t.driverName}</td>
-                    <td style={{ color: '#555' }}>---</td>
-                    <td style={{ color: '#555' }}>---</td>
-                    <td style={{ color: '#555' }}>---</td>
-                    <td style={{ color: 'var(--neon-blue)', fontWeight: 800, fontSize: '13px', textTransform: 'uppercase' }}>W trakcie okrążenia...</td>
-                    <td style={{ color: 'var(--neon-orange)' }}>{Math.round(t.speed || 0)} km/h</td>
-                    <td style={{ color: 'var(--text-secondary)' }}>—</td>
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
+              {inProgressDrivers.map((t: any) => (
+                <tr
+                  key={`in-progress-${t.driverName}`}
+                  style={{ background: 'rgba(0, 240, 255, 0.05)', transition: 'all 0.2s ease' }}
+                >
+                  <td style={{ color: 'var(--text-secondary)', fontWeight: 900, fontSize: '18px' }}>—</td>
+                  <td style={{ fontWeight: 800, fontSize: '16px', color: 'white' }}>{t.driverName}</td>
+                  <td style={{ color: '#888899' }}>---</td>
+                  <td style={{ color: '#888899' }}>---</td>
+                  <td style={{ color: '#888899' }}>---</td>
+                  <td style={{ color: 'var(--neon-cyan)', fontWeight: 800, fontSize: '13px', textTransform: 'uppercase' }}>W trakcie okrążenia...</td>
+                  <td style={{ color: 'var(--neon-orange)' }}>{Math.round(t.speed || 0)} km/h</td>
+                  <td style={{ color: 'var(--text-secondary)' }}>—</td>
+                </tr>
+              ))}
               {sortedLaps.length === 0 && inProgressDrivers.length === 0 && (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>

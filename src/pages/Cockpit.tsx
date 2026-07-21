@@ -648,15 +648,13 @@ export default function Cockpit() {
       {/* Main OLED HUD Layer */}
       {phase === 'racing' && (
       <div style={{ zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', padding: '16px 24px', gap: '12px' }}>
-          <div>
-            <span style={{ color: 'var(--neon-green)', fontWeight: 800, fontSize: 'clamp(16px, 4vw, 24px)', textShadow: '0 0 10px rgba(0,255,136,0.5)' }}>{driverName}</span>
-            <span style={{ color: '#aaa', marginLeft: '8px', fontSize: '12px', textTransform: 'uppercase' }}>{vehicleType}</span>
+        {/* Top Header Bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: 'var(--neon-green)', fontWeight: 800, fontSize: 'clamp(18px, 4vw, 24px)', textShadow: '0 0 10px rgba(0,255,136,0.5)' }}>{driverName}</span>
+            <span style={{ background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.15)', color: '#aaa', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700 }}>{vehicleType}</span>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: 'var(--neon-cyan)', fontWeight: 800 }}>LIVE LAP TIME</div>
-            <div ref={liveTimerRef} className="font-digital" style={{ fontSize: 'clamp(22px, 5vw, 32px)', color: 'white', textShadow: '0 0 15px rgba(255,255,255,0.4)' }}></div>
-          </div>
+          
           <button
             className="btn-danger"
             onPointerDown={startExitHold}
@@ -664,9 +662,9 @@ export default function Cockpit() {
             onPointerLeave={cancelExitHold}
             onPointerCancel={cancelExitHold}
             style={{
-              position: 'relative', overflow: 'hidden', padding: '12px 20px', minHeight: '44px',
+              position: 'relative', overflow: 'hidden', padding: '10px 18px', minHeight: '44px',
               background: 'rgba(255,0,0,0.15)', border: '2px solid var(--neon-red)', color: 'white',
-              touchAction: 'none', userSelect: 'none', justifySelf: 'end', fontSize: '13px', fontWeight: 900
+              touchAction: 'none', userSelect: 'none', fontSize: '12px', fontWeight: 900, borderRadius: '10px'
             }}
           >
             <div style={{
@@ -698,17 +696,28 @@ export default function Cockpit() {
           </div>
         )}
 
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '12px' }}>
-          <div ref={deltaElRef} className="font-digital" style={{ fontSize: 'clamp(32px, 8vw, 48px)', height: '50px', opacity: 0.9 }}>
+        {/* Main Central Telemetry Area */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '8px 16px' }}>
+          
+          {/* Live Lap Time Box (Lowered into main view) */}
+          <div style={{ background: 'rgba(0, 0, 0, 0.65)', border: '1px solid rgba(0, 240, 255, 0.4)', borderRadius: '14px', padding: '8px 24px', textAlign: 'center', marginBottom: '8px', boxShadow: '0 0 20px rgba(0, 240, 255, 0.15)' }}>
+            <div style={{ fontSize: '10px', color: 'var(--neon-cyan)', fontWeight: 800, letterSpacing: '1px' }}>LIVE LAP TIME</div>
+            <div ref={liveTimerRef} className="font-digital" style={{ fontSize: 'clamp(28px, 6vw, 42px)', color: 'white', textShadow: '0 0 15px rgba(255,255,255,0.4)', lineHeight: 1.1 }}>0.000</div>
+          </div>
+
+          {/* Delta Display */}
+          <div ref={deltaElRef} className="font-digital" style={{ fontSize: 'clamp(24px, 5vw, 36px)', height: '40px', opacity: 0.9 }}>
             {/* Delta goes here */}
           </div>
+
+          {/* Speedometer */}
           <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <div ref={speedElRef} className="font-digital" style={{ fontSize: 'clamp(90px, 20vw, 180px)', color: 'white', lineHeight: 1, textShadow: '0 0 20px rgba(255,255,255,0.2)' }}></div>
+            <div ref={speedElRef} className="font-digital" style={{ fontSize: 'clamp(90px, 20vw, 170px)', color: 'white', lineHeight: 1, textShadow: '0 0 20px rgba(255,255,255,0.2)' }}>0</div>
             <div style={{ color: '#aaa', fontSize: 'clamp(20px, 4vw, 32px)', fontWeight: 800, marginLeft: '12px' }}>km/h</div>
           </div>
 
           {/* G-Force RPM Bar & Lean Angle Display */}
-          <div style={{ width: '80%', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', marginTop: '20px', overflow: 'hidden' }}>
+          <div style={{ width: '80%', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', marginTop: '16px', overflow: 'hidden' }}>
             <div ref={gForceBarRef} style={{ height: '100%', width: '0%', background: 'var(--neon-purple)', transition: 'width 0.1s linear, background 0.2s' }} />
           </div>
           
