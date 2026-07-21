@@ -28,6 +28,7 @@ export default function Cockpit() {
   const deltaRef = useRef<number | null>(null);
   const gForceRef = useRef(0);
   const lapStartTimeRef = useRef<number | null>(null);
+  const lapNumberRef = useRef<number>(1);
   const lastTimeRef = useRef<number>(0); // For live timer to keep running smoothly
 
   // Timing state
@@ -76,6 +77,7 @@ export default function Cockpit() {
     setS1Time(null); setS2Time(null); setS3Time(null);
     maxSpeedRef.current = 0;
     lapStartTimeRef.current = null;
+    lapNumberRef.current = 1;
     
     if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
       try { await (DeviceMotionEvent as any).requestPermission(); } catch (e) { console.error(e); }
@@ -173,12 +175,14 @@ export default function Cockpit() {
               const elapsed = exactTimestamp - lapStartTimeRef.current;
               sectorTimes.push(elapsed);
               
-              if (nextGateIndex === 1) setS1Time(elapsed);
-              if (nextGateIndex === 2) setS2Time(elapsed - sectorTimes[0]);
+              if (nextGateIndex === 1 && gates.length > 2) setS1Time(elapsed);
+              if (nextGateIndex === 2 && gates.length > 3) setS2Time(elapsed - sectorTimes[0]);
               
               if (nextGateIndex === gates.length - 1) {
                 const totalTime = elapsed;
-                setS3Time(totalTime - sectorTimes[sectorTimes.length - 2]);
+                if (gates.length > 2) {
+                    setS3Time(totalTime - sectorTimes[sectorTimes.length - 2]);
+                }
                 
                 if (bestLap) {
                   const delta = totalTime - bestLap.lapTime;
@@ -191,11 +195,14 @@ export default function Cockpit() {
 
                 recordLap({
                   driverName, vehicleType, trackId: track._id,
-                  lapNumber: 1, lapTime: totalTime,
-                  s1: sectorTimes[0], s2: sectorTimes[1] - sectorTimes[0], s3: totalTime - sectorTimes[1],
+                  lapNumber: lapNumberRef.current, lapTime: totalTime,
+                  s1: sectorTimes[0],
+                  s2: gates.length > 2 ? (sectorTimes[1] - sectorTimes[0]) : undefined,
+                  s3: gates.length > 3 ? (totalTime - sectorTimes[1]) : (gates.length > 2 ? (totalTime - sectorTimes[0]) : undefined),
                   topSpeed: maxSpeedRef.current, timestamp: Date.now()
                 }).catch(console.error);
 
+                lapNumberRef.current++;
                 nextGateIndex = 1; 
                 lapStartTimeRef.current = exactTimestamp;
                 sectorTimes = [];
@@ -244,7 +251,7 @@ export default function Cockpit() {
       if (liveTimerRef.current) {
         if (lapStartTimeRef.current) {
           // Calculate elapsed strictly using current time minus exact lap start
-          const elapsed = lastTimeRef.current - lapStartTimeRef.current;
+          const elapsed = Date.now() - lapStartTimeRef.current;
           liveTimerRef.current.innerText = (elapsed / 1000).toFixed(3);
         } else {
           liveTimerRef.current.innerText = '0.000';
@@ -293,10 +300,11 @@ export default function Cockpit() {
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <motion.div animate={errorName ? { x: [-10, 10, -10, 10, 0] } : {}} transition={{ duration: 0.4 }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: errorName ? 'var(--neon-red)' : 'var(--text-secondary)', textTransform: 'uppercase' }}>
+            <label htmlFor="driverName" style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: errorName ? 'var(--neon-red)' : 'var(--text-secondary)', textTransform: 'uppercase' }}>
               Imię Kierowcy {errorName && ' (WYMAGANE)'}
             </label>
             <input 
+              id="driverName"
               className="custom-input" 
               style={{ borderColor: errorName ? 'var(--neon-red)' : undefined }}
               placeholder="Wpisz imię..." 
@@ -306,18 +314,19 @@ export default function Cockpit() {
           </motion.div>
           
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Pojazd</label>
-            <select className="custom-select" value={vehicleType} onChange={(e: any) => setVehicleType(e.target.value)}>
+            <label htmlFor="vehicleType" style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Pojazd</label>
+            <select id="vehicleType" className="custom-select" value={vehicleType} onChange={(e: any) => setVehicleType(e.target.value)}>
               <option value="scooter">Hulajnoga</option>
               <option value="bike">Rower</option>
             </select>
           </div>
           
           <motion.div animate={errorTrack ? { x: [-10, 10, -10, 10, 0] } : {}} transition={{ duration: 0.4 }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: errorTrack ? 'var(--neon-red)' : 'var(--text-secondary)', textTransform: 'uppercase' }}>
+            <label htmlFor="trackSelect" style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: errorTrack ? 'var(--neon-red)' : 'var(--text-secondary)', textTransform: 'uppercase' }}>
               Wybierz Trasę {errorTrack && ' (WYMAGANE)'}
             </label>
             <select 
+              id="trackSelect"
               className="custom-select" 
               style={{ borderColor: errorTrack ? 'var(--neon-red)' : undefined }}
               value={selectedTrack} 
