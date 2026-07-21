@@ -5,12 +5,20 @@ import { api } from '../../convex/_generated/api';
 import { checkLineIntersection, generateGateLine, GPSKalmanFilter } from '../lib/math';
 import { initAudio, playF1StartBeep, playLapFinishBeep } from '../lib/audio';
 import { requestWakeLock, releaseWakeLock } from '../lib/wakelock';
+import { queueLap, flushLapQueue, getQueuedLapCount } from '../lib/offlineQueue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
 type Point = { lat: number; lon: number };
+
+// Ignore GPS fixes worse than this (meters) for lap/sector gate detection -
+// a poor fix can otherwise register a false gate crossing.
+const MAX_GPS_ACCURACY_METERS = 25;
+// Minimum time between two detections of the *same* gate, to avoid GPS
+// jitter re-triggering the gate crossing twice in a row.
+const MIN_GATE_REARM_MS = 2000;
 
 export default function Cockpit() {
   const navigate = useNavigate();
@@ -50,6 +58,18 @@ export default function Cockpit() {
 
   const watchIdRef = useRef<number | null>(null);
   const motionHandlerRef = useRef<any>(null);
+
+  // GPS permission/availability error shown to the driver
+  const [gpsError, setGpsError] = useState<string | null>(null);
+
+  // Laps that failed to sync to Convex and are waiting to be resent
+  const [pendingLapCount, setPendingLapCount] = useState(0);
+
+  // "Hold to confirm" state for the ZAKOŃCZ (exit race) button
+  const [exitHoldProgress, setExitHoldProgress] = useState(0);
+  const exitHoldStartRef = useRef<number | null>(null);
+  const exitHoldRafRef = useRef<number | null>(null);
+  const EXIT_HOLD_MS = 900;
 
   // @ts-ignore
   const tracks = useQuery(api.tracks.getTracks) || [];
@@ -157,6 +177,7 @@ export default function Cockpit() {
 
     let nextGateIndex = 1;
     let sectorTimes: number[] = [];
+    let lastGateCrossTime = 0;
 
     const filter = new GPSKalmanFilter();
     let lastPoint: Point | null = null;
@@ -171,14 +192,21 @@ export default function Cockpit() {
         const accuracy = pos.coords.accuracy;
         const speedKmh = (pos.coords.speed || 0) * 3.6;
 
+        timeOffsetRef.current = Date.now() - rawTime;
+        speedRef.current = speedKmh;
+        if (speedKmh > maxSpeedRef.current) maxSpeedRef.current = speedKmh;
+
+        // A poor GPS fix can trigger a false gate crossing (jitter jumping
+        // across the sector line). Still show speed, but skip lap-detection
+        // and telemetry for this reading and wait for a better fix.
+        if (accuracy != null && accuracy > MAX_GPS_ACCURACY_METERS) {
+          return;
+        }
+
         if (lapStartTimeRef.current === null) {
           lapStartTimeRef.current = rawTime;
           lapStartTimeLocalRef.current = performance.now();
         }
-
-        timeOffsetRef.current = Date.now() - rawTime;
-        speedRef.current = speedKmh;
-        if (speedKmh > maxSpeedRef.current) maxSpeedRef.current = speedKmh;
 
         const filtered = filter.process(pos.coords.latitude, pos.coords.longitude, accuracy, rawTime);
         const currentPoint: Point = { lat: filtered.lat, lon: filtered.lon };
@@ -203,10 +231,14 @@ export default function Cockpit() {
         if (lastPoint && nextGateIndex < gates.length) {
           const gate = gates[nextGateIndex];
           const ua = checkLineIntersection(lastPoint, currentPoint, gate[0], gate[1]);
-          
-          if (ua !== null) {
+
+          if (ua !== null && Date.now() - lastGateCrossTime < MIN_GATE_REARM_MS) {
+            // Likely GPS jitter re-crossing the same gate right after the
+            // last detection - ignore it.
+          } else if (ua !== null) {
+            lastGateCrossTime = Date.now();
             const exactTimestamp = lastTime + ua * (rawTime - lastTime);
-            
+
             if (nextGateIndex === 0) {
               lapStartTimeRef.current = exactTimestamp;
               lapStartTimeLocalRef.current = performance.now();
@@ -235,14 +267,22 @@ export default function Cockpit() {
                 setLapFlash(true);
                 setTimeout(() => setLapFlash(false), 2000);
 
-                recordLap({
-                  driverName, vehicleType, trackId: track._id,
-                  lapNumber: lapNumberRef.current, lapTime: totalTime,
-                  s1: sectorTimes[0],
-                  s2: gates.length > 2 ? (sectorTimes[1] - sectorTimes[0]) : undefined,
-                  s3: gates.length > 3 ? (totalTime - sectorTimes[1]) : (gates.length > 2 ? (totalTime - sectorTimes[0]) : undefined),
-                  topSpeed: maxSpeedRef.current, timestamp: Date.now()
-                }).catch(console.error);
+                {
+                  const lapArgs = {
+                    driverName, vehicleType, trackId: track._id,
+                    lapNumber: lapNumberRef.current, lapTime: totalTime,
+                    s1: sectorTimes[0],
+                    s2: gates.length > 2 ? (sectorTimes[1] - sectorTimes[0]) : undefined,
+                    s3: gates.length > 3 ? (totalTime - sectorTimes[1]) : (gates.length > 2 ? (totalTime - sectorTimes[0]) : undefined),
+                    topSpeed: maxSpeedRef.current, timestamp: Date.now()
+                  };
+                  recordLap(lapArgs).catch(() => {
+                    // Connection dropped mid-ride - keep the lap locally and
+                    // retry once we're back online instead of losing it.
+                    const count = queueLap(lapArgs);
+                    setPendingLapCount(count);
+                  });
+                }
 
                 lapNumberRef.current++;
                 nextGateIndex = 1; 
@@ -261,12 +301,15 @@ export default function Cockpit() {
       },
       (err) => {
         console.error(err);
-        const messages: Record<number, string> = {
-          1: 'Brak dostępu do lokalizacji. Zezwól na GPS w ustawieniach przeglądarki/telefonu i spróbuj ponownie.',
-          2: 'Nie można ustalić pozycji GPS. Sprawdź sygnał GPS i połączenie.',
-          3: 'Przekroczono czas oczekiwania na sygnał GPS.',
-        };
-        setGpsError(messages[err.code] || 'Błąd GPS — sprawdź uprawnienia lokalizacji.');
+        if (err.code === err.PERMISSION_DENIED) {
+          setGpsError('Brak uprawnień do lokalizacji. Włącz dostęp do GPS dla tej strony w ustawieniach telefonu/przeglądarki.');
+        } else if (err.code === err.TIMEOUT) {
+          setGpsError('Nie udało się uzyskać sygnału GPS. Wyjdź na otwartą przestrzeń i spróbuj ponownie.');
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          setGpsError('Lokalizacja GPS jest niedostępna. Sprawdź, czy GPS jest włączony w telefonie.');
+        } else {
+          setGpsError('Błąd GPS. Sprawdź uprawnienia i połączenie lokalizacji.');
+        }
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
@@ -281,6 +324,61 @@ export default function Cockpit() {
     setGpsError(null);
     navigate('/control', { state: { trackId: selectedTrack } });
   };
+
+  // "Hold to confirm" handlers for the ZAKOŃCZ (exit race) button, to avoid
+  // accidental taps aborting the race while riding on rough ground.
+  const cancelExitHold = () => {
+    exitHoldStartRef.current = null;
+    setExitHoldProgress(0);
+    if (exitHoldRafRef.current) cancelAnimationFrame(exitHoldRafRef.current);
+    exitHoldRafRef.current = null;
+  };
+
+  const startExitHold = () => {
+    exitHoldStartRef.current = performance.now();
+    const tick = () => {
+      if (exitHoldStartRef.current === null) return;
+      const elapsed = performance.now() - exitHoldStartRef.current;
+      const pct = Math.min(elapsed / EXIT_HOLD_MS, 1);
+      setExitHoldProgress(pct);
+      if (pct >= 1) {
+        exitHoldStartRef.current = null;
+        setExitHoldProgress(0);
+        abortRace();
+        return;
+      }
+      exitHoldRafRef.current = requestAnimationFrame(tick);
+    };
+    exitHoldRafRef.current = requestAnimationFrame(tick);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (exitHoldRafRef.current) cancelAnimationFrame(exitHoldRafRef.current);
+    };
+  }, []);
+
+  // Retry any laps that failed to sync (e.g. connection dropped mid-ride)
+  // once we're back online.
+  useEffect(() => {
+    setPendingLapCount(getQueuedLapCount());
+
+    const tryFlush = () => {
+      flushLapQueue(recordLap).then(setPendingLapCount);
+    };
+
+    tryFlush();
+    window.addEventListener('online', tryFlush);
+    const intervalId = setInterval(() => {
+      if (navigator.onLine) tryFlush();
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('online', tryFlush);
+      clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 60FPS UI rendering
   useEffect(() => {
@@ -476,8 +574,46 @@ export default function Cockpit() {
             <div style={{ fontSize: '12px', color: 'var(--neon-blue)', fontWeight: 800 }}>LIVE LAP TIME</div>
             <div ref={liveTimerRef} className="font-digital" style={{ fontSize: '32px', color: 'white', textShadow: '0 0 15px rgba(255,255,255,0.4)' }}></div>
           </div>
-          <button className="btn-danger" onClick={abortRace} style={{ padding: '8px 16px', background: 'rgba(255,0,0,0.1)', border: '1px solid var(--neon-red)', color: 'white' }}>ZAKOŃCZ</button>
+          <button
+            className="btn-danger"
+            onPointerDown={startExitHold}
+            onPointerUp={cancelExitHold}
+            onPointerLeave={cancelExitHold}
+            onPointerCancel={cancelExitHold}
+            style={{
+              position: 'relative', overflow: 'hidden', padding: '8px 16px',
+              background: 'rgba(255,0,0,0.1)', border: '1px solid var(--neon-red)', color: 'white',
+              touchAction: 'none', userSelect: 'none',
+            }}
+          >
+            <div style={{
+              position: 'absolute', top: 0, left: 0, bottom: 0,
+              width: `${exitHoldProgress * 100}%`, background: 'rgba(255,0,0,0.5)',
+              transition: exitHoldProgress === 0 ? 'width 0.15s ease-out' : 'none',
+            }} />
+            <span style={{ position: 'relative' }}>PRZYTRZYMAJ ZAKOŃCZ</span>
+          </button>
         </div>
+
+        {gpsError && (
+          <div style={{
+            margin: '0 24px', padding: '10px 16px', background: 'rgba(255,0,0,0.15)',
+            border: '1px solid var(--neon-red)', borderRadius: '8px', color: 'white',
+            fontSize: '13px', textAlign: 'center',
+          }}>
+            {gpsError}
+          </div>
+        )}
+
+        {pendingLapCount > 0 && (
+          <div style={{
+            margin: '8px 24px 0', padding: '8px 16px', background: 'rgba(255,145,0,0.15)',
+            border: '1px solid var(--neon-orange)', borderRadius: '8px', color: 'white',
+            fontSize: '12px', textAlign: 'center',
+          }}>
+            Zapisano offline: {pendingLapCount} {pendingLapCount === 1 ? 'okrążenie' : 'okrążeń'} — wysyłanie po odzyskaniu połączenia...
+          </div>
+        )}
 
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
           <div ref={deltaElRef} className="font-digital" style={{ fontSize: '48px', height: '60px', opacity: 0.9 }}>
