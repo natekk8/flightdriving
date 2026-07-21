@@ -41,9 +41,12 @@ export const record = mutation({
 });
 
 export const clearBoard = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const laps = await ctx.db.query("laps").collect();
+  args: { trackId: v.id("tracks") },
+  handler: async (ctx, args) => {
+    const laps = await ctx.db
+      .query("laps")
+      .filter((q) => q.eq(q.field("trackId"), args.trackId))
+      .collect();
     for (const lap of laps) {
       await ctx.db.delete(lap._id);
     }

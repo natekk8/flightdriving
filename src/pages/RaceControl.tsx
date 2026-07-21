@@ -217,7 +217,7 @@ export default function RaceControl() {
           <option value="">-- Wybierz Trasę --</option>
           {tracks.map((t: any) => <option key={t._id} value={t._id}>{t.name}</option>)}
         </select>
-        <button className="btn-danger" style={{ transform: 'skewX(-12deg)', marginLeft: 'auto' }} onClick={() => { if (window.confirm('Czy na pewno chcesz zresetować wszystkie wyniki? (Tej akcji nie można cofnąć)')) { clearBoard(); } }}>Reset Wyników dla wybranej trasy</button>
+        <button className="btn-danger" style={{ transform: 'skewX(-12deg)', marginLeft: 'auto' }} onClick={() => { if (!selectedTrack) { alert('Wybierz trasę, aby zresetować wyniki.'); return; } if (window.confirm('Czy na pewno chcesz zresetować wszystkie wyniki dla tej trasy? (Tej akcji nie można cofnąć)')) { clearBoard({ trackId: selectedTrack as any }); } }}>Reset Wyników dla wybranej trasy</button>
       </div>
 
       {/* Top Stat Cards */}

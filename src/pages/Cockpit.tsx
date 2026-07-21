@@ -196,8 +196,8 @@ export default function Cockpit() {
                 recordLap({
                   driverName, vehicleType, trackId: track._id,
                   lapNumber: lapNumberRef.current, lapTime: totalTime,
-                  s1: sectorTimes[0],
-                  s2: gates.length > 2 ? (sectorTimes[1] - sectorTimes[0]) : undefined,
+                  s1: gates.length > 2 ? sectorTimes[0] : undefined,
+                  s2: gates.length > 3 ? (sectorTimes[1] - sectorTimes[0]) : undefined,
                   s3: gates.length > 3 ? (totalTime - sectorTimes[1]) : (gates.length > 2 ? (totalTime - sectorTimes[0]) : undefined),
                   topSpeed: maxSpeedRef.current, timestamp: Date.now()
                 }).catch(console.error);
