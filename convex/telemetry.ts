@@ -4,7 +4,10 @@ import { v } from "convex/values";
 export const get = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("telemetry").collect();
+    const all = await ctx.db.query("telemetry").collect();
+    const now = Date.now();
+    // Return only active drivers with telemetry in the last 30 seconds
+    return all.filter((t) => !t.timestamp || now - t.timestamp < 30000);
   },
 });
 
@@ -50,3 +53,4 @@ export const clearAll = mutation({
     }
   },
 });
+

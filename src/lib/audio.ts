@@ -9,6 +9,20 @@ export function initAudio() {
   }
 }
 
+export function speakRaceEngineerMessage(text: string) {
+  if (!('speechSynthesis' in window)) return;
+  try {
+    window.speechSynthesis.cancel(); // cancel any ongoing speech
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'pl-PL';
+    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {
+    console.error('Speech synthesis error:', e);
+  }
+}
+
 export function playBeep(frequency: number, durationMs: number, type: OscillatorType = 'sine', volume: number = 0.5) {
   if (!audioCtx) return;
   const osc = audioCtx.createOscillator();
@@ -61,3 +75,4 @@ export function playLapFinishBeep() {
   setTimeout(() => playBeep(1200, 400, 'sine', 0.8), 400);
   if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
 }
+

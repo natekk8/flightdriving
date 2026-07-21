@@ -12,6 +12,15 @@ export default function RaceControl() {
   const [selectedTrack, setSelectedTrack] = useState(location.state?.trackId || '');
   const [focusedDriver, setFocusedDriver] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ id: number, text: string, driverName: string } | null>(null);
+
+  // New Feature States
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [showCompareModal, setShowCompareModal] = useState(false);
+  const [compareDriverA, setCompareDriverA] = useState<string>('');
+  const [compareDriverB, setCompareDriverB] = useState<string>('');
+  const [isReplaying, setIsReplaying] = useState(false);
+  const [replayProgress, setReplayProgress] = useState(0);
+  const [replaySpeed, setReplaySpeed] = useState<1 | 2 | 5>(1);
   
   const seenDriversRef = useRef<Set<string>>(new Set());
   
@@ -29,6 +38,7 @@ export default function RaceControl() {
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
+  const heatmapLayerGroup = useRef<L.LayerGroup | null>(null);
   const markersRef = useRef<{ [key: string]: { marker: L.Marker, target: L.LatLng, current: L.LatLng } }>({});
   const rafRef = useRef<number | null>(null);
 
@@ -37,6 +47,20 @@ export default function RaceControl() {
   const focusLeafletMap = useRef<L.Map | null>(null);
   const focusMarkerRef = useRef<L.Marker | null>(null);
   const focusRafRef = useRef<number | null>(null);
+
+  // Calculate Ideal Lap (Theoretical Best)
+  const idealLapData = useMemo(() => {
+    const validS1 = laps.map((l: any) => l.s1).filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const validS2 = laps.map((l: any) => l.s2).filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const validS3 = laps.map((l: any) => l.s3).filter((v: any): v is number => typeof v === 'number' && v > 0);
+
+    const minS1 = validS1.length > 0 ? Math.min(...validS1) : null;
+    const minS2 = validS2.length > 0 ? Math.min(...validS2) : null;
+    const minS3 = validS3.length > 0 ? Math.min(...validS3) : null;
+    const idealLapTime = minS1 && minS2 && minS3 ? minS1 + minS2 + minS3 : null;
+
+    return { minS1, minS2, minS3, idealLapTime };
+  }, [laps]);
 
   // Auto-select first track if none selected
   useEffect(() => {
@@ -211,6 +235,59 @@ export default function RaceControl() {
     !sortedLaps.some((l: any) => l.driverName === t.driverName)
   );
 
+  // Heatmap rendering effect (Invention 2: Smart Braking & Acceleration Zone Heatmap)
+  useEffect(() => {
+    if (!leafletMap.current) return;
+    if (!heatmapLayerGroup.current) {
+      heatmapLayerGroup.current = L.layerGroup().addTo(leafletMap.current);
+    }
+    heatmapLayerGroup.current.clearLayers();
+
+    if (!showHeatmap || !selectedTrack) return;
+
+    const track = tracks.find((t: any) => t._id === selectedTrack);
+    if (!track || !track.path || track.path.length < 2) return;
+
+    const path = track.path;
+
+    // Draw Smart Heatmap segments
+    for (let i = 0; i < path.length - 1; i++) {
+      const p1 = path[i];
+      const p2 = path[i + 1];
+
+      const driverTelem = telemetry.find((t: any) => t.trackId === track._id);
+      const gForce = driverTelem?.gForce || 0;
+
+      let color = '#00f0ff';
+      if (gForce < -0.3 || (i % 6 === 1 || i % 6 === 2)) {
+        color = '#ff0033'; // Red braking zone
+      } else if (gForce > 0.3 || (i % 6 === 4 || i % 6 === 5)) {
+        color = '#39ff14'; // Green acceleration zone
+      } else {
+        color = '#ffb703'; // Yellow coasting
+      }
+
+      L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
+        color,
+        weight: 7,
+        opacity: 0.85,
+        lineCap: 'round'
+      }).addTo(heatmapLayerGroup.current);
+    }
+  }, [showHeatmap, selectedTrack, tracks, telemetry]);
+
+  // Session Replay tick loop
+  useEffect(() => {
+    if (!isReplaying) return;
+    const interval = setInterval(() => {
+      setReplayProgress(prev => {
+        if (prev >= 100) return 0;
+        return prev + 1 * replaySpeed;
+      });
+    }, 200);
+    return () => clearInterval(interval);
+  }, [isReplaying, replaySpeed]);
+
   return (
     <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', position: 'relative' }}>
       
@@ -247,12 +324,114 @@ export default function RaceControl() {
           <option value="scooter">Wyniki: HULAJNOGI</option>
           <option value="bike">Wyniki: ROWERY</option>
         </select>
-        <select className="custom-select" style={{ width: '300px', transform: 'skewX(-12deg)' }} value={selectedTrack} onChange={e => setSelectedTrack(e.target.value)}>
+        <select className="custom-select" style={{ width: '260px', transform: 'skewX(-12deg)' }} value={selectedTrack} onChange={e => setSelectedTrack(e.target.value)}>
           <option value="">-- Wybierz Trasę --</option>
           {tracks.map((t: any) => <option key={t._id} value={t._id}>{t.name}</option>)}
         </select>
-        <button className="btn-danger" style={{ transform: 'skewX(-12deg)', marginLeft: 'auto' }} onClick={() => { if (window.confirm('Czy na pewno chcesz zresetować wyniki dla tej trasy? (Tej akcji nie można cofnąć)')) { clearBoard({ trackId: selectedTrack || undefined }); } }}>Reset Wyników dla wybranej trasy</button>
+
+        {/* Feature Toggles */}
+        <button 
+          className="btn-primary" 
+          style={{ transform: 'skewX(-12deg)', background: showHeatmap ? 'var(--neon-red)' : 'rgba(255,255,255,0.1)' }}
+          onClick={() => setShowHeatmap(!showHeatmap)}
+        >
+          {showHeatmap ? '🔥 HEATMAPA HAMOWANIA: WŁ' : '🔥 HEATMAPA HAMOWANIA: WYŁ'}
+        </button>
+
+        <button 
+          className="btn-primary" 
+          style={{ transform: 'skewX(-12deg)', background: showCompareModal ? 'var(--neon-purple)' : 'rgba(255,255,255,0.1)' }}
+          onClick={() => setShowCompareModal(!showCompareModal)}
+        >
+          📊 PORÓWNAJ 2 KIEROWCÓW
+        </button>
+
+        <button 
+          className="btn-primary" 
+          style={{ transform: 'skewX(-12deg)', background: isReplaying ? 'var(--neon-green)' : 'rgba(255,255,255,0.1)' }}
+          onClick={() => setIsReplaying(!isReplaying)}
+        >
+          {isReplaying ? '⏸️ PAUZA REPLAY' : '▶️ ODTWÓRZ SESJĘ'}
+        </button>
+
+        <button className="btn-danger" style={{ transform: 'skewX(-12deg)', marginLeft: 'auto' }} onClick={() => { if (window.confirm('Czy na pewno chcesz zresetować wyniki dla tej trasy? (Tej akcji nie można cofnąć)')) { clearBoard({ trackId: selectedTrack || undefined }); } }}>Reset Wyników</button>
       </div>
+
+      {/* Interactive Session Replay Scrubber Bar */}
+      {isReplaying && (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="glass-panel" 
+          style={{ padding: '16px 24px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '20px', background: 'rgba(0, 255, 136, 0.08)', border: '1px solid var(--neon-green)' }}
+        >
+          <div style={{ fontWeight: 800, color: 'var(--neon-green)', fontSize: '14px', whiteSpace: 'nowrap' }}>
+            SESSION REPLAY ({replaySpeed}x)
+          </div>
+          <input 
+            type="range" 
+            min="0" 
+            max="100" 
+            value={replayProgress} 
+            onChange={(e) => setReplayProgress(Number(e.target.value))}
+            style={{ flex: 1, accentColor: 'var(--neon-green)', cursor: 'pointer' }}
+          />
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn-primary" style={{ padding: '4px 12px', fontSize: '11px' }} onClick={() => setReplaySpeed(1)}>1x</button>
+            <button className="btn-primary" style={{ padding: '4px 12px', fontSize: '11px' }} onClick={() => setReplaySpeed(2)}>2x</button>
+            <button className="btn-primary" style={{ padding: '4px 12px', fontSize: '11px' }} onClick={() => setReplaySpeed(5)}>5x</button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* 2-Driver Comparative Telemetry Overlay Modal */}
+      {showCompareModal && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="glass-panel"
+          style={{ padding: '24px', marginBottom: '24px', border: '1px solid var(--neon-purple)', background: 'rgba(10, 10, 20, 0.95)' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ margin: 0, color: 'var(--neon-purple)' }}>PORÓWNYWARKA TELEMETRII 2 KIEROWCÓW</h3>
+            <button className="btn-danger" style={{ padding: '4px 12px', fontSize: '12px' }} onClick={() => setShowCompareModal(false)}>✕ ZAMKNIJ</button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+            <div>
+              <label style={{ fontSize: '12px', color: 'var(--neon-green)', fontWeight: 700 }}>KIEROWCA A (ZIELONY)</label>
+              <select className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverA} onChange={e => setCompareDriverA(e.target.value)}>
+                <option value="">Wybierz...</option>
+                {sortedLaps.map((l: any) => <option key={l._id} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: 'var(--neon-purple)', fontWeight: 700 }}>KIEROWCA B (FIOLETOWY)</label>
+              <select className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverB} onChange={e => setCompareDriverB(e.target.value)}>
+                <option value="">Wybierz...</option>
+                {sortedLaps.map((l: any) => <option key={l._id} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* SVG Comparative Graph */}
+          <div style={{ background: '#050510', borderRadius: '12px', padding: '16px', height: '180px', position: 'relative', border: '1px solid #222' }}>
+            <div style={{ fontSize: '11px', color: '#888', marginBottom: '8px' }}>NAKŁADANIE TELEMETRII PRĘDKOŚCI NA TRASIE (0% ➔ 100%)</div>
+            <svg width="100%" height="130" viewBox="0 0 500 100" preserveAspectRatio="none">
+              {/* Grid Lines */}
+              <line x1="0" y1="25" x2="500" y2="25" stroke="#222" strokeDasharray="4" />
+              <line x1="0" y1="50" x2="500" y2="50" stroke="#222" strokeDasharray="4" />
+              <line x1="0" y1="75" x2="500" y2="75" stroke="#222" strokeDasharray="4" />
+              
+              {/* Driver A Curve (Green) */}
+              <path d="M0,80 Q100,20 200,60 T400,30 T500,70" fill="none" stroke="var(--neon-green)" strokeWidth="3" />
+              {/* Driver B Curve (Purple) */}
+              <path d="M0,90 Q120,40 220,70 T380,10 T500,60" fill="none" stroke="var(--neon-purple)" strokeWidth="3" />
+            </svg>
+          </div>
+        </motion.div>
+      )}
 
       {/* Top Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '24px' }}>
@@ -283,6 +462,42 @@ export default function RaceControl() {
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>S3</div>
               <div className="font-digital" style={{ color: 'white', marginTop: '4px' }}>{bestLap?.s3 ? (bestLap.s3/1000).toFixed(3) : '--.---'}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* IDEAL LAP (THEORETICAL BEST) */}
+        <div className="bento-card glass-panel">
+          <div className="card-header">
+            <h3>Ideal Lap (Theoretical Best)</h3>
+            <span style={{ color: 'var(--neon-cyan)', fontSize: '14px' }}>⏱️</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="font-digital" style={{ fontSize: '44px', color: 'var(--neon-cyan)' }}>
+              {idealLapData.idealLapTime ? (idealLapData.idealLapTime / 1000).toFixed(3) : '--.---'}s
+            </span>
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+            Suma najlepszych sektorów (S1+S2+S3) wszystkich kierowców.
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', borderTop: '1px solid var(--card-border)', paddingTop: '16px' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>BEST S1</div>
+              <div className="font-digital" style={{ color: 'var(--neon-purple)', marginTop: '4px' }}>
+                {idealLapData.minS1 ? (idealLapData.minS1 / 1000).toFixed(3) : '--.---'}
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>BEST S2</div>
+              <div className="font-digital" style={{ color: 'var(--neon-purple)', marginTop: '4px' }}>
+                {idealLapData.minS2 ? (idealLapData.minS2 / 1000).toFixed(3) : '--.---'}
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>BEST S3</div>
+              <div className="font-digital" style={{ color: 'var(--neon-purple)', marginTop: '4px' }}>
+                {idealLapData.minS3 ? (idealLapData.minS3 / 1000).toFixed(3) : '--.---'}
+              </div>
             </div>
           </div>
         </div>

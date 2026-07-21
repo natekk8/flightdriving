@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
+import { calculateTrackCorners } from '../lib/math';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -35,6 +36,9 @@ export default function TrackSetup() {
   useEffect(() => { s1IndexRef.current = s1Index; }, [s1Index]);
   useEffect(() => { s2IndexRef.current = s2Index; }, [s2Index]);
 
+  // Corner analysis for current path
+  const corners = useMemo(() => calculateTrackCorners(path), [path]);
+
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
     
@@ -67,6 +71,58 @@ export default function TrackSetup() {
       if (leafletMap.current.hasLayer(labelsLayer.current)) leafletMap.current.removeLayer(labelsLayer.current);
     }
   }, [labelsVisible]);
+
+  // Render Polylines, Markers, and Corner Badges
+  useEffect(() => {
+    if (!layerGroup.current) return;
+    layerGroup.current.clearLayers();
+
+    let s1 = s1Index ?? path.length;
+    let s2 = s2Index ?? path.length;
+
+    const p1 = path.slice(0, s1 + 1);
+    const p2 = path.slice(s1, s2 + 1);
+    const p3 = path.slice(s2, path.length);
+
+    if (p1.length > 0) L.polyline(p1 as any, { color: '#00f0ff', weight: 6, opacity: 0.8 }).addTo(layerGroup.current);
+    if (p2.length > 0) L.polyline(p2 as any, { color: '#f3123c', weight: 6, opacity: 0.8 }).addTo(layerGroup.current);
+    if (p3.length > 0) L.polyline(p3 as any, { color: '#39ff14', weight: 6, opacity: 0.8 }).addTo(layerGroup.current);
+
+    // Corner Badges
+    const cornerMap = new Map(corners.map(c => [c.index, c]));
+
+    path.forEach((pt, idx) => {
+      const isStart = idx === 0;
+      const isFinish = idx === path.length - 1;
+      const isS1 = idx === s1Index;
+      const isS2 = idx === s2Index;
+      const corner = cornerMap.get(idx);
+      
+      let html = `<div style="width:100%;height:100%;border-radius:50%;background:rgba(255,255,255,0.4);border:1px solid white;"></div>`;
+      let size = 12;
+
+      if (isStart) {
+        html = `<div style="width:100%;height:100%;border-radius:50%;background:#00f0ff;box-shadow:0 0 10px #00f0ff;border:2px solid white;"></div>`;
+        size = 18;
+      } else if (isFinish) {
+        html = `<div style="width:100%;height:100%;border-radius:50%;background:#39ff14;box-shadow:0 0 10px #39ff14;border:2px solid white;"></div>`;
+        size = 18;
+      } else if (isS1) {
+        html = `<div style="width:100%;height:100%;border-radius:50%;background:#f3123c;box-shadow:0 0 15px #f3123c;border:3px solid white;animation: pulse 1.5s infinite;"></div>`;
+        size = 24;
+      } else if (isS2) {
+        html = `<div style="width:100%;height:100%;border-radius:50%;background:#ff9100;box-shadow:0 0 15px #ff9100;border:3px solid white;animation: pulse 1.5s infinite;"></div>`;
+        size = 24;
+      } else if (corner) {
+        const badgeColor = corner.severity === 'hairpin' ? '#ff0033' : corner.severity === 'sharp' ? '#ff9100' : '#00f0ff';
+        html = `<div style="background:rgba(0,0,0,0.85);color:${badgeColor};border:1px solid ${badgeColor};border-radius:4px;padding:2px 6px;font-size:10px;font-weight:800;white-space:nowrap;">${corner.label} (${corner.angleDegrees}°)</div>`;
+        size = 20;
+      }
+
+      const icon = L.divIcon({ html, className: '', iconSize: [size, size] });
+      L.marker([pt.lat, pt.lon], { icon }).addTo(layerGroup.current!);
+    });
+  }, [path, s1Index, s2Index, corners]);
 
   // Handle map clicks
   useEffect(() => {

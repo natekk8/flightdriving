@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
-import { checkLineIntersection, generateGateLine, GPSKalmanFilter } from '../lib/math';
-import { initAudio, playF1StartBeep, playLapFinishBeep } from '../lib/audio';
+import { checkLineIntersection, generateGateLine, GPSKalmanFilter, interpolateSubPoints, getDynamicGateWidth, calculateTrackProgress } from '../lib/math';
+import { initAudio, playF1StartBeep, playLapFinishBeep, speakRaceEngineerMessage } from '../lib/audio';
 import { requestWakeLock, releaseWakeLock } from '../lib/wakelock';
 import { queueLap, flushLapQueue, getQueuedLapCount } from '../lib/offlineQueue';
 import L from 'leaflet';
@@ -39,7 +39,10 @@ export default function Cockpit() {
   const speedRef = useRef(0);
   const maxSpeedRef = useRef(0);
   const deltaRef = useRef<number | null>(null);
+  const liveGhostDeltaRef = useRef<number | null>(null);
   const gForceRef = useRef(0);
+  const leanAngleRef = useRef(0);
+  const [leanAngleDisplay, setLeanAngleDisplay] = useState(0);
   const lapStartTimeRef = useRef<number | null>(null);
   const lapNumberRef = useRef<number>(1);
   const timeOffsetRef = useRef<number>(0);
@@ -59,6 +62,8 @@ export default function Cockpit() {
 
   const watchIdRef = useRef<number | null>(null);
   const motionHandlerRef = useRef<any>(null);
+  const orientationHandlerRef = useRef<any>(null);
+
 
   // Laps that failed to sync to Convex and are waiting to be resent
   const [pendingLapCount, setPendingLapCount] = useState(0);
@@ -147,6 +152,9 @@ export default function Cockpit() {
     if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
       try { await (DeviceMotionEvent as any).requestPermission(); } catch (e) { console.error(e); }
     }
+    if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+      try { await (DeviceOrientationEvent as any).requestPermission(); } catch (e) { console.error(e); }
+    }
     
     motionHandlerRef.current = (e: DeviceMotionEvent) => {
       const x = e.acceleration?.x || 0;
@@ -154,6 +162,14 @@ export default function Cockpit() {
       gForceRef.current = Math.sqrt(x*x + y*y) / 9.81;
     };
     window.addEventListener('devicemotion', motionHandlerRef.current);
+
+    orientationHandlerRef.current = (e: DeviceOrientationEvent) => {
+      // Roll angle (gamma) or pitch (beta)
+      const roll = e.gamma || 0;
+      leanAngleRef.current = Math.round(roll);
+      setLeanAngleDisplay(Math.round(roll));
+    };
+    window.addEventListener('deviceorientation', orientationHandlerRef.current);
 
     let currentLight = 0;
     const interval = setInterval(() => {
@@ -168,6 +184,7 @@ export default function Cockpit() {
           setLights(0);
           setIsLightsOut(true);
           playF1StartBeep(true);
+          speakRaceEngineerMessage("Start! Dajesz gazu!");
           
           setTimeout(() => {
             setPhase('racing');
@@ -182,12 +199,13 @@ export default function Cockpit() {
     const track = tracks.find((t: any) => t._id === selectedTrack);
     if (!track || !track.path || track.path.length < 2) return;
 
-    // Generate Gates
+    // Generate Gates with dynamic width
     const gates: [Point, Point][] = [];
-    gates.push(generateGateLine(track.path, 0));
-    if (track.s1Index !== undefined) gates.push(generateGateLine(track.path, track.s1Index));
-    if (track.s2Index !== undefined) gates.push(generateGateLine(track.path, track.s2Index));
-    gates.push(generateGateLine(track.path, track.path.length - 1));
+    const baseGateWidth = 40;
+    gates.push(generateGateLine(track.path, 0, baseGateWidth));
+    if (track.s1Index !== undefined) gates.push(generateGateLine(track.path, track.s1Index, baseGateWidth));
+    if (track.s2Index !== undefined) gates.push(generateGateLine(track.path, track.s2Index, baseGateWidth));
+    gates.push(generateGateLine(track.path, track.path.length - 1, baseGateWidth));
 
     let nextGateIndex = 1;
     let sectorTimes: number[] = [];
@@ -210,9 +228,6 @@ export default function Cockpit() {
         speedRef.current = speedKmh;
         if (speedKmh > maxSpeedRef.current) maxSpeedRef.current = speedKmh;
 
-        // A poor GPS fix can trigger a false gate crossing (jitter jumping
-        // across the sector line). Still show speed, but skip lap-detection
-        // and telemetry for this reading and wait for a better fix.
         if (accuracy != null && accuracy > MAX_GPS_ACCURACY_METERS) {
           return;
         }
@@ -224,6 +239,18 @@ export default function Cockpit() {
 
         const filtered = filter.process(pos.coords.latitude, pos.coords.longitude, accuracy, rawTime);
         const currentPoint: Point = { lat: filtered.lat, lon: filtered.lon };
+
+        // Calculate Real-Time Live Ghost Delta
+        if (track.path && track.path.length >= 2 && lapStartTimeRef.current !== null) {
+          const { progressRatio } = calculateTrackProgress(currentPoint, track.path);
+          const currentLapElapsedSec = (rawTime - lapStartTimeRef.current) / 1000;
+          const bestLap = bestLapRef.current;
+
+          if (bestLap && bestLap.lapTime && progressRatio > 0.05) {
+            const expectedTimeSec = (bestLap.lapTime / 1000) * progressRatio;
+            liveGhostDeltaRef.current = currentLapElapsedSec - expectedTimeSec;
+          }
+        }
 
         // Update Map Marker
         if (userMarker.current && leafletMap.current) {
@@ -243,15 +270,36 @@ export default function Cockpit() {
         }
 
         if (lastPoint && nextGateIndex < gates.length) {
-          const gate = gates[nextGateIndex];
-          const ua = checkLineIntersection(lastPoint, currentPoint, gate[0], gate[1]);
+          // Sub-sample trajectory path between previous GPS fix and current GPS fix
+          const dynamicGateWidth = getDynamicGateWidth(speedKmh, accuracy || 10);
+          const activeGateIndex = nextGateIndex;
+          let gateIndexToTest = activeGateIndex;
+          if (activeGateIndex === 1 && track.s1Index !== undefined) gateIndexToTest = track.s1Index;
+          else if (activeGateIndex === 2 && track.s2Index !== undefined) gateIndexToTest = track.s2Index;
+          else if (activeGateIndex === gates.length - 1) gateIndexToTest = track.path.length - 1;
+          else gateIndexToTest = 0;
 
-          if (ua !== null && Date.now() - lastGateCrossTime < MIN_GATE_REARM_MS) {
-            // Likely GPS jitter re-crossing the same gate right after the
-            // last detection - ignore it.
-          } else if (ua !== null) {
+          const gate = generateGateLine(track.path, Math.min(gateIndexToTest, track.path.length - 1), dynamicGateWidth);
+
+          const subPoints = interpolateSubPoints(lastPoint, currentPoint, 6);
+          let detectedIntersection: number | null = null;
+          let detectedSubIndex = 0;
+
+          for (let step = 0; step < subPoints.length - 1; step++) {
+            const ua = checkLineIntersection(subPoints[step], subPoints[step + 1], gate[0], gate[1]);
+            if (ua !== null) {
+              detectedIntersection = ua;
+              detectedSubIndex = step;
+              break;
+            }
+          }
+
+          if (detectedIntersection !== null && Date.now() - lastGateCrossTime < MIN_GATE_REARM_MS) {
+            // Re-arm ignore
+          } else if (detectedIntersection !== null) {
             lastGateCrossTime = Date.now();
-            const exactTimestamp = lastTime + ua * (rawTime - lastTime);
+            const subFraction = (detectedSubIndex + detectedIntersection) / 5;
+            const exactTimestamp = lastTime + subFraction * (rawTime - lastTime);
 
             if (nextGateIndex === 0) {
               lapStartTimeRef.current = exactTimestamp;
@@ -261,15 +309,18 @@ export default function Cockpit() {
               const elapsed = exactTimestamp - lapStartTimeRef.current;
               sectorTimes.push(elapsed);
 
-              // hasS1/hasS2 reflect which sector gates actually exist for
-              // this track - used instead of fragile array-length-based
-              // indexing so partially-configured tracks (e.g. only S1) don't
-              // produce bogus/undefined sector values.
               const hasS1 = gates.length > 2;
               const hasS2 = gates.length > 3;
 
-              if (nextGateIndex === 1 && hasS1) setS1Time(elapsed);
-              if (nextGateIndex === 2 && hasS2) setS2Time(elapsed - sectorTimes[0]);
+              if (nextGateIndex === 1 && hasS1) {
+                setS1Time(elapsed);
+                speakRaceEngineerMessage(`Sektor 1: ${(elapsed / 1000).toFixed(1)} sekundy`);
+              }
+              if (nextGateIndex === 2 && hasS2) {
+                const s2Val = elapsed - sectorTimes[0];
+                setS2Time(s2Val);
+                speakRaceEngineerMessage(`Sektor 2: ${(s2Val / 1000).toFixed(1)} sekundy`);
+              }
 
               if (nextGateIndex === gates.length - 1) {
                 const totalTime = elapsed;
@@ -279,16 +330,25 @@ export default function Cockpit() {
                 }
 
                 const bestLap = bestLapRef.current;
+                let isPersonalBest = false;
                 if (bestLap) {
                   const delta = totalTime - bestLap.lapTime;
                   deltaRef.current = delta;
+                  if (delta < 0) isPersonalBest = true;
                 } else {
                   deltaRef.current = -1;
+                  isPersonalBest = true;
                 }
 
                 playLapFinishBeep();
                 setLapFlash(true);
                 setTimeout(() => setLapFlash(false), 2000);
+
+                if (isPersonalBest) {
+                  speakRaceEngineerMessage(`Meta! Rekord życiowy! ${(totalTime / 1000).toFixed(2)} sekundy`);
+                } else {
+                  speakRaceEngineerMessage(`Meta okrążenia! Czas: ${(totalTime / 1000).toFixed(2)} sekundy`);
+                }
 
                 {
                   const lapArgs = {
@@ -300,8 +360,6 @@ export default function Cockpit() {
                     topSpeed: maxSpeedRef.current, timestamp: Date.now()
                   };
                   recordLap(lapArgs).catch(() => {
-                    // Connection dropped mid-ride - keep the lap locally and
-                    // retry once we're back online instead of losing it.
                     const count = queueLap(lapArgs);
                     setPendingLapCount(count);
                   });
@@ -318,6 +376,7 @@ export default function Cockpit() {
             }
           }
         }
+
         
         lastPoint = currentPoint;
         lastTime = rawTime;
@@ -648,11 +707,17 @@ export default function Cockpit() {
             <div style={{ color: '#aaa', fontSize: 'clamp(20px, 4vw, 32px)', fontWeight: 800, marginLeft: '12px' }}>km/h</div>
           </div>
 
-          {/* G-Force RPM Bar */}
-          <div style={{ width: '80%', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', marginTop: '24px', overflow: 'hidden' }}>
+          {/* G-Force RPM Bar & Lean Angle Display */}
+          <div style={{ width: '80%', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', marginTop: '20px', overflow: 'hidden' }}>
             <div ref={gForceBarRef} style={{ height: '100%', width: '0%', background: 'var(--neon-purple)', transition: 'width 0.1s linear, background 0.2s' }} />
           </div>
-          <div style={{ color: '#aaa', fontSize: '11px', marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>G-Force / Acceleration</div>
+          
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginTop: '8px' }}>
+            <div style={{ color: '#aaa', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px' }}>G-FORCE ACCELERATION</div>
+            <div style={{ color: 'var(--neon-cyan)', fontSize: '11px', fontWeight: 800, padding: '2px 8px', background: 'rgba(0,240,255,0.1)', borderRadius: '4px', border: '1px solid rgba(0,240,255,0.3)' }}>
+              LEAN ANGLE: {Math.abs(leanAngleDisplay)}° {leanAngleDisplay > 5 ? '➡️ R' : leanAngleDisplay < -5 ? '⬅️ L' : '⏺️'}
+            </div>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2px', background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)' }}>
