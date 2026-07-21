@@ -17,6 +17,7 @@ export default function TrackSetup() {
   const [mode, setMode] = useState<'draw' | 's1' | 's2'>('draw');
   const [labelsVisible, setLabelsVisible] = useState(true);
   const [showTrackList, setShowTrackList] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   // @ts-ignore
   const rawTracks = useQuery(api.tracks.getTracks);
@@ -311,23 +312,36 @@ export default function TrackSetup() {
           maxHeight: 'calc(100vh - 80px)', overflowY: 'auto'
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-            <span style={{ background: 'var(--f1-red)', color: '#fff', fontSize: '10px', fontWeight: 900, padding: '2px 6px', borderRadius: '4px', transform: 'skew(-10deg)' }}>CAD</span>
-            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px' }}>KREATOR TRAS F1</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{ background: 'var(--f1-red)', color: '#fff', fontSize: '10px', fontWeight: 900, padding: '2px 6px', borderRadius: '4px', transform: 'skew(-10deg)' }}>CAD</span>
+              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px' }}>KREATOR TRAS F1</h2>
+            </div>
+            {!panelCollapsed && (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '11px', marginTop: '4px' }}>
+                Rysuj tor i przypinaj sektory do wyrysowanej linii wyścigowej.
+              </p>
+            )}
           </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '6px' }}>
-            Rysuj tor, a następnie jednym kliknięciem przypinaj precyzyjnie sektory do wyrysowanej linii wyścigowej.
-          </p>
+          <button 
+            className="btn-secondary" 
+            style={{ padding: '4px 8px', fontSize: '10px', whiteSpace: 'nowrap' }}
+            onClick={() => setPanelCollapsed(!panelCollapsed)}
+          >
+            {panelCollapsed ? '📂 Otwórz' : '➖ Zwiń'}
+          </button>
         </div>
         
-        <input 
-          className="custom-input" 
-          placeholder="Nazwa trasa... (np. Szybka Nocna)" 
-          value={trackName} 
-          onChange={e => setTrackName(e.target.value)} 
-          style={{ fontSize: '15px' }}
-        />
+        {!panelCollapsed && (
+          <>
+            <input 
+              className="custom-input" 
+              placeholder="Nazwa trasa... (np. Szybka Nocna)" 
+              value={trackName} 
+              onChange={e => setTrackName(e.target.value)} 
+              style={{ fontSize: '14px' }}
+            />
 
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn-secondary" style={{ flex: 1, fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleLocate}>
@@ -444,7 +458,9 @@ export default function TrackSetup() {
             </div>
           )}
         </div>
-      </motion.div>
+      </>
+    )}
+  </motion.div>
 
       <div ref={mapRef} style={{ flex: 1, width: '100%' }} />
     </div>

@@ -365,3 +365,25 @@ button {
   filter: brightness(0.45) saturate(1.3) contrast(1.15) hue-rotate(15deg);
 }
 
+/* Responsive Helper Display Classes */
+.desktop-only {
+  display: flex;
+}
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .desktop-only {
+    display: none !important;
+  }
+  .mobile-only {
+    display: flex !important;
+  }
+  
+  /* Extra mobile padding adjustments */
+  .bento-card {
+    padding: 16px !important;
+  }
+}
+
