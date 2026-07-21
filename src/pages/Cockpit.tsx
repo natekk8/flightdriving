@@ -126,12 +126,7 @@ export default function Cockpit() {
     let nextGateIndex = 1;
     let sectorTimes: number[] = [];
 
-    if (lapStartTimeRef.current === null) {
-      lapStartTimeRef.current = rawTime;
-      lapStartTimeLocalRef.current = performance.now();
-    }
-
-const filter = new GPSKalmanFilter();
+    const filter = new GPSKalmanFilter();
     let lastPoint: Point | null = null;
     let lastTime = 0;
     let lastTelemetryTime = 0;
@@ -143,6 +138,11 @@ const filter = new GPSKalmanFilter();
         const accuracy = pos.coords.accuracy;
         const speedKmh = (pos.coords.speed || 0) * 3.6;
         
+        if (lapStartTimeRef.current === null) {
+          lapStartTimeRef.current = rawTime;
+          lapStartTimeLocalRef.current = performance.now();
+        }
+
         timeOffsetRef.current = Date.now() - rawTime;
         speedRef.current = speedKmh;
         if (speedKmh > maxSpeedRef.current) maxSpeedRef.current = speedKmh;
@@ -368,7 +368,7 @@ const filter = new GPSKalmanFilter();
       )}
 
       {phase === 'f1_lights' && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', zIndex: 10000 }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', zIndex: 10 }}>
           <div style={{ display: 'flex', gap: '16px', background: '#050505', padding: '24px', borderRadius: '16px', border: '1px solid #222' }}>
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: '#0a0a0a', borderRadius: '12px' }}>
