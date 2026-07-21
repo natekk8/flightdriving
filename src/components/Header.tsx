@@ -84,28 +84,29 @@ export default function Header() {
   return (
     <header style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '12px 28px', background: 'rgba(7, 7, 10, 0.92)',
+      padding: '10px 16px', background: 'rgba(7, 7, 10, 0.95)',
       borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-      backdropFilter: 'blur(20px)', position: 'sticky', top: 0, zIndex: 1000
+      backdropFilter: 'blur(20px)', position: 'sticky', top: 0, zIndex: 1000,
+      flexWrap: 'wrap', gap: '10px 16px'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{
             background: 'linear-gradient(135deg, #e10600 0%, #ff3b30 100%)',
-            color: '#fff', fontSize: '11px', fontWeight: 900, padding: '3px 7px',
+            color: '#fff', fontSize: '10px', fontWeight: 900, padding: '2px 6px',
             borderRadius: '4px', transform: 'skew(-12deg)', letterSpacing: '1px',
             boxShadow: '0 0 12px rgba(225, 6, 0, 0.6)'
           }}>
             F1 PIT
           </div>
-          <div style={{ color: 'white', fontWeight: 900, fontSize: '19px', letterSpacing: '2px', fontFamily: 'Outfit' }}>
+          <div style={{ color: 'white', fontWeight: 900, fontSize: '17px', letterSpacing: '1.5px', fontFamily: 'Outfit' }}>
             <span style={{ color: 'var(--neon-cyan)', textShadow: '0 0 15px rgba(0,240,255,0.4)' }}>FLIGHT</span> DRIVING
           </div>
         </div>
         <ConnectionStatus />
       </div>
 
-      <nav style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+      <nav style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
@@ -117,25 +118,25 @@ export default function Header() {
                 position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                padding: '8px 16px',
+                gap: '6px',
+                padding: '6px 12px',
                 color: isActive ? '#ffffff' : 'var(--text-secondary)',
                 textDecoration: 'none',
                 fontWeight: 700,
-                fontSize: '13px',
+                fontSize: '12px',
                 textTransform: 'uppercase',
-                letterSpacing: '1px',
+                letterSpacing: '0.5px',
                 transition: 'color 0.2s ease'
               }}
             >
-              <Icon size={16} style={{ color: isActive ? item.accent : 'inherit' }} />
+              <Icon size={14} style={{ color: isActive ? item.accent : 'inherit' }} />
               <span>{item.label}</span>
               {isActive && (
                 <motion.div
                   layoutId="headerActiveTab"
                   style={{
                     position: 'absolute',
-                    bottom: '-12px',
+                    bottom: '-10px',
                     left: 0,
                     right: 0,
                     height: '3px',
@@ -151,7 +152,7 @@ export default function Header() {
         })}
       </nav>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <LiveClock />
       </div>
     </header>

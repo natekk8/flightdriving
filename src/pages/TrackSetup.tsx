@@ -306,9 +306,9 @@ export default function TrackSetup() {
         animate={{ x: 0, opacity: 1 }}
         className="glass-panel" 
         style={{
-          padding: '20px', zIndex: 1000, position: 'absolute', top: '16px', left: '16px',
-          width: 'clamp(280px, 90vw, 360px)', display: 'flex', flexDirection: 'column', gap: '16px',
-          maxHeight: 'calc(100vh - 90px)', overflowY: 'auto'
+          padding: '18px', zIndex: 1000, position: 'absolute', top: '12px', left: 'clamp(8px, 2.5vw, 16px)',
+          width: 'clamp(270px, 94vw, 360px)', display: 'flex', flexDirection: 'column', gap: '14px',
+          maxHeight: 'calc(100vh - 80px)', overflowY: 'auto'
         }}
       >
         <div>

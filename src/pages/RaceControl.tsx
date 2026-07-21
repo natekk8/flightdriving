@@ -322,19 +322,19 @@ export default function RaceControl() {
         initial={{ opacity: 0, y: -15 }}
         animate={{ opacity: 1, y: 0 }}
         className="glass-panel" 
-        style={{ display: 'flex', gap: '16px', marginBottom: '24px', padding: '16px 24px', flexWrap: 'wrap', alignItems: 'center', borderTop: '2px solid var(--f1-red)' }}
+        style={{ display: 'flex', gap: '12px', marginBottom: '24px', padding: '16px 20px', flexWrap: 'wrap', alignItems: 'center', borderTop: '2px solid var(--f1-red)' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '8px', height: '24px', background: 'var(--f1-red)', borderRadius: '2px' }} />
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase' }}>RACE CONTROL PIT WALL</h2>
+          <div style={{ width: '6px', height: '22px', background: 'var(--f1-red)', borderRadius: '2px' }} />
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase' }}>RACE CONTROL PIT WALL</h2>
         </div>
 
-        <select className="custom-select" style={{ width: '210px' }} value={activeTab} onChange={e => setActiveTab(e.target.value as any)}>
+        <select className="custom-select" style={{ flex: '1 1 160px', width: 'auto', minWidth: '140px' }} value={activeTab} onChange={e => setActiveTab(e.target.value as any)}>
           <option value="scooter">🛵 Wyniki: HULAJNOGI</option>
           <option value="bike">🚴 Wyniki: ROWERY</option>
         </select>
 
-        <select className="custom-select" style={{ width: '260px' }} value={selectedTrack} onChange={e => setSelectedTrack(e.target.value)}>
+        <select className="custom-select" style={{ flex: '1 1 200px', width: 'auto', minWidth: '160px' }} value={selectedTrack} onChange={e => setSelectedTrack(e.target.value)}>
           <option value="">-- Wybierz Trasę --</option>
           {tracks.map((t: any) => <option key={t._id} value={t._id}>{t.name}</option>)}
         </select>
@@ -343,6 +343,9 @@ export default function RaceControl() {
         <button 
           className="btn-secondary" 
           style={{
+            flex: '1 1 140px',
+            fontSize: '12px',
+            padding: '12px 14px',
             background: showHeatmap ? 'rgba(243, 18, 60, 0.2)' : 'rgba(255,255,255,0.05)',
             borderColor: showHeatmap ? 'var(--neon-red)' : 'rgba(255,255,255,0.15)',
             color: showHeatmap ? '#fff' : 'var(--text-secondary)'
@@ -355,6 +358,9 @@ export default function RaceControl() {
         <button 
           className="btn-secondary" 
           style={{
+            flex: '1 1 160px',
+            fontSize: '12px',
+            padding: '12px 14px',
             background: showCompareModal ? 'rgba(176, 0, 255, 0.2)' : 'rgba(255,255,255,0.05)',
             borderColor: showCompareModal ? 'var(--neon-purple)' : 'rgba(255,255,255,0.15)',
             color: showCompareModal ? '#fff' : 'var(--text-secondary)'
@@ -367,6 +373,9 @@ export default function RaceControl() {
         <button 
           className="btn-secondary" 
           style={{
+            flex: '1 1 150px',
+            fontSize: '12px',
+            padding: '12px 14px',
             background: isReplaying ? 'rgba(57, 255, 20, 0.2)' : 'rgba(255,255,255,0.05)',
             borderColor: isReplaying ? 'var(--neon-green)' : 'rgba(255,255,255,0.15)',
             color: isReplaying ? '#fff' : 'var(--text-secondary)'
@@ -378,7 +387,7 @@ export default function RaceControl() {
 
         <button 
           className="btn-danger" 
-          style={{ marginLeft: 'auto' }} 
+          style={{ fontSize: '12px', padding: '12px 16px' }} 
           onClick={() => { if (window.confirm('Czy na pewno chcesz zresetować wyniki dla tej trasy? (Tej akcji nie można cofnąć)')) { clearBoard({ trackId: selectedTrack || undefined }); } }}
         >
           Reset Wyników

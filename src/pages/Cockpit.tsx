@@ -635,16 +635,16 @@ export default function Cockpit() {
       )}
 
       {phase === 'f1_lights' && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', zIndex: 10 }}>
-          <div style={{ display: 'flex', gap: '16px', background: '#050505', padding: '24px', borderRadius: '16px', border: '1px solid #222' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', zIndex: 10, padding: '16px' }}>
+          <div style={{ display: 'flex', gap: 'clamp(4px, 1.8vw, 14px)', background: '#050505', padding: 'clamp(10px, 3vw, 24px)', borderRadius: '16px', border: '1px solid #222', maxWidth: '94vw', justifyContent: 'center' }}>
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: '#0a0a0a', borderRadius: '12px' }}>
-                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: (!isLightsOut && lights >= i) ? '#ff0000' : '#111', boxShadow: (!isLightsOut && lights >= i) ? '0 0 40px #ff0000' : 'none' }} />
-                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: (!isLightsOut && lights >= i) ? '#ff0000' : '#111', boxShadow: (!isLightsOut && lights >= i) ? '0 0 40px #ff0000' : 'none' }} />
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(4px, 1.5vw, 8px)', padding: 'clamp(4px, 1.5vw, 10px)', background: '#0a0a0a', borderRadius: '10px' }}>
+                <div style={{ width: 'clamp(24px, 8.5vw, 44px)', height: 'clamp(24px, 8.5vw, 44px)', borderRadius: '50%', background: (!isLightsOut && lights >= i) ? '#ff0000' : '#111', boxShadow: (!isLightsOut && lights >= i) ? '0 0 30px #ff0000' : 'none' }} />
+                <div style={{ width: 'clamp(24px, 8.5vw, 44px)', height: 'clamp(24px, 8.5vw, 44px)', borderRadius: '50%', background: (!isLightsOut && lights >= i) ? '#ff0000' : '#111', boxShadow: (!isLightsOut && lights >= i) ? '0 0 30px #ff0000' : 'none' }} />
               </div>
             ))}
           </div>
-          <h1 style={{ marginTop: '48px', color: isLightsOut ? 'var(--neon-green)' : 'white', fontFamily: 'var(--font-mono)', fontSize: 'clamp(28px, 6vw, 48px)', fontStyle: isLightsOut ? 'italic' : 'normal', textAlign: 'center' }}>
+          <h1 style={{ marginTop: '32px', color: isLightsOut ? 'var(--neon-green)' : 'white', fontFamily: 'var(--font-mono)', fontSize: 'clamp(20px, 5vw, 40px)', fontStyle: isLightsOut ? 'italic' : 'normal', textAlign: 'center', maxWidth: '90vw' }}>
             {isLightsOut ? 'LIGHTS OUT AND AWAY WE GO!' : 'CZEKAJ NA SYGNAŁ...'}
           </h1>
         </div>
