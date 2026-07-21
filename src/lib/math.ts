@@ -7,33 +7,34 @@ function toRad(val: number) { return val * Math.PI / 180; }
 export function generateGateLine(path: Point[], index: number, widthMeters = 40): [Point, Point] {
   if (path.length < 2) return [path[0], path[0]];
   
-  let p1 = path[index];
-  let p0 = index > 0 ? path[index - 1] : p1;
-  let p2 = index < path.length - 1 ? path[index + 1] : p1;
+  const p1 = path[index];
+  const p0 = index > 0 ? path[index - 1] : p1;
+  const p2 = index < path.length - 1 ? path[index + 1] : p1;
   
-  // Calculate average direction
-  let dx = p2.lon - p0.lon;
-  let dy = p2.lat - p0.lat;
+  const cosLat = Math.cos(toRad(p1.lat));
   
-  // Perpendicular vector
-  let px = -dy;
-  let py = dx;
+  // Tangent vector in approximate meters
+  const dxMeters = (p2.lon - p0.lon) * 111320 * cosLat;
+  const dyMeters = (p2.lat - p0.lat) * 111320;
+  
+  // Perpendicular vector in meters
+  const pxMeters = -dyMeters;
+  const pyMeters = dxMeters;
   
   // Normalize
-  let len = Math.sqrt(px*px + py*py);
+  const len = Math.sqrt(pxMeters * pxMeters + pyMeters * pyMeters);
   if (len === 0) return [p1, p1];
-  px /= len;
-  py /= len;
   
-  // Convert width to lat/lon offsets roughly
-  // 1 degree lat = 111320 meters
-  // 1 degree lon = 40075000 * cos(lat) / 360 meters
-  const latOffset = (widthMeters / 2) / 111320;
-  const lonOffset = (widthMeters / 2) / (111320 * Math.cos(toRad(p1.lat)));
+  const pxNorm = pxMeters / len;
+  const pyNorm = pyMeters / len;
+  
+  const halfWidth = widthMeters / 2;
+  const latOffset = (pyNorm * halfWidth) / 111320;
+  const lonOffset = (pxNorm * halfWidth) / (111320 * cosLat);
   
   return [
-    { lat: p1.lat + py * latOffset, lon: p1.lon + px * lonOffset },
-    { lat: p1.lat - py * latOffset, lon: p1.lon - px * lonOffset }
+    { lat: p1.lat + latOffset, lon: p1.lon + lonOffset },
+    { lat: p1.lat - latOffset, lon: p1.lon - lonOffset }
   ];
 }
 

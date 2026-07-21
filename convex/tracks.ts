@@ -26,6 +26,13 @@ export const saveTrack = mutation({
 export const deleteTrack = mutation({
   args: { id: v.id("tracks") },
   handler: async (ctx, args) => {
+    const laps = await ctx.db
+      .query("laps")
+      .withIndex("by_trackId", (q) => q.eq("trackId", args.id))
+      .collect();
+    for (const lap of laps) {
+      await ctx.db.delete(lap._id);
+    }
     await ctx.db.delete(args.id);
   },
 });

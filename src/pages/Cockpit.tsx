@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
@@ -69,10 +69,14 @@ export default function Cockpit() {
   const exitHoldRafRef = useRef<number | null>(null);
   const EXIT_HOLD_MS = 900;
 
+  const [isLightsOut, setIsLightsOut] = useState(false);
+
   // @ts-ignore
-  const tracks = useQuery(api.tracks.getTracks) || [];
+  const rawTracks = useQuery(api.tracks.getTracks);
+  const tracks = useMemo(() => rawTracks ?? [], [rawTracks]);
   // @ts-ignore
-  const laps = useQuery(api.laps.getTimingBoard, { trackId: selectedTrack || undefined, vehicleType }) || [];
+  const rawLaps = useQuery(api.laps.getTimingBoard, { trackId: selectedTrack || undefined, vehicleType });
+  const laps = useMemo(() => rawLaps ?? [], [rawLaps]);
   // @ts-ignore
   const updateTelemetry = useMutation(api.telemetry.update);
   // @ts-ignore
@@ -83,16 +87,11 @@ export default function Cockpit() {
   const userMarker = useRef<L.Marker | null>(null);
   const trackPathLayer = useRef<L.Polyline | null>(null);
 
-  // Kept in a ref (rather than a plain variable) so the watchPosition
-  // callback - which closes over it once when the race starts - always
-  // sees the latest best lap, including laps recorded during this session.
   const bestLapRef = useRef<any>(null);
   useEffect(() => {
-    bestLapRef.current = [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime)[0] ?? null;
+    bestLapRef.current = laps.length > 0 ? [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime)[0] : null;
   }, [laps]);
 
-  // Validates that the selected track has a usable path and, if defined,
-  // sector gates in sane positions before a race is allowed to start.
   const validateTrackConfig = (track: any): string | null => {
     if (!track || !track.path || track.path.length < 2) {
       return 'Ta trasa nie ma poprawnie zdefiniowanej ścieżki (min. 2 punkty). Popraw ją w Ustawieniach Trasy.';
@@ -132,7 +131,12 @@ export default function Cockpit() {
 
     initAudio();
     await requestWakeLock();
+    
+    // Start GPS tracking early so connection is live and verified
+    startGPS();
+
     setPhase('f1_lights');
+    setIsLightsOut(false);
     
     setS1Time(null); setS2Time(null); setS3Time(null);
     maxSpeedRef.current = 0;
@@ -159,10 +163,16 @@ export default function Cockpit() {
         playF1StartBeep(false);
       } else {
         clearInterval(interval);
+        // Random F1 delay before Lights Out (500ms - 2000ms)
         setTimeout(() => {
+          setLights(0);
+          setIsLightsOut(true);
           playF1StartBeep(true);
-          setPhase('racing');
-          startGPS();
+          
+          setTimeout(() => {
+            setPhase('racing');
+            setIsLightsOut(false);
+          }, 800);
         }, 500 + Math.random() * 1500);
       }
     }, 1000);
@@ -528,13 +538,13 @@ export default function Cockpit() {
           <div style={{ display: 'flex', gap: '16px', background: '#050505', padding: '24px', borderRadius: '16px', border: '1px solid #222' }}>
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: '#0a0a0a', borderRadius: '12px' }}>
-                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: lights >= i ? '#ff0000' : '#111', boxShadow: lights >= i ? '0 0 40px #ff0000' : 'none' }} />
-                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: lights >= i ? '#ff0000' : '#111', boxShadow: lights >= i ? '0 0 40px #ff0000' : 'none' }} />
+                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: (!isLightsOut && lights >= i) ? '#ff0000' : '#111', boxShadow: (!isLightsOut && lights >= i) ? '0 0 40px #ff0000' : 'none' }} />
+                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: (!isLightsOut && lights >= i) ? '#ff0000' : '#111', boxShadow: (!isLightsOut && lights >= i) ? '0 0 40px #ff0000' : 'none' }} />
               </div>
             ))}
           </div>
-          <h1 style={{ marginTop: '48px', color: 'white', fontFamily: 'var(--font-mono)', fontSize: '48px' }}>
-            CZEKAJ NA SYGNAŁ...
+          <h1 style={{ marginTop: '48px', color: isLightsOut ? 'var(--neon-green)' : 'white', fontFamily: 'var(--font-mono)', fontSize: 'clamp(28px, 6vw, 48px)', fontStyle: isLightsOut ? 'italic' : 'normal', textAlign: 'center' }}>
+            {isLightsOut ? 'LIGHTS OUT AND AWAY WE GO!' : 'CZEKAJ NA SYGNAŁ...'}
           </h1>
         </div>
       )}
@@ -551,7 +561,7 @@ export default function Cockpit() {
               background: 'rgba(0, 255, 136, 0.2)', zIndex: 10001, pointerEvents: 'none'
             }}
           >
-            <h1 style={{ fontSize: '120px', color: 'white', textShadow: '0 0 40px var(--neon-green)', fontWeight: 900, fontStyle: 'italic' }}>
+            <h1 style={{ fontSize: 'clamp(60px, 15vw, 120px)', color: 'white', textShadow: '0 0 40px var(--neon-green)', fontWeight: 900, fontStyle: 'italic' }}>
               META
             </h1>
           </motion.div>
@@ -576,19 +586,17 @@ export default function Cockpit() {
         )}
       </AnimatePresence>
 
-      {/* Main OLED HUD Layer - only during the race itself, so the light
-          sequence stays on a plain black screen with no speed/timer/name
-          bleeding through underneath. */}
+      {/* Main OLED HUD Layer */}
       {phase === 'racing' && (
       <div style={{ zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', padding: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', padding: '16px 24px', gap: '12px' }}>
           <div>
-            <span style={{ color: 'var(--neon-green)', fontWeight: 800, fontSize: '24px', textShadow: '0 0 10px rgba(0,255,136,0.5)' }}>{driverName}</span>
-            <span style={{ color: '#aaa', marginLeft: '12px', fontSize: '14px', textTransform: 'uppercase' }}>{vehicleType}</span>
+            <span style={{ color: 'var(--neon-green)', fontWeight: 800, fontSize: 'clamp(16px, 4vw, 24px)', textShadow: '0 0 10px rgba(0,255,136,0.5)' }}>{driverName}</span>
+            <span style={{ color: '#aaa', marginLeft: '8px', fontSize: '12px', textTransform: 'uppercase' }}>{vehicleType}</span>
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: 'var(--neon-blue)', fontWeight: 800 }}>LIVE LAP TIME</div>
-            <div ref={liveTimerRef} className="font-digital" style={{ fontSize: '32px', color: 'white', textShadow: '0 0 15px rgba(255,255,255,0.4)' }}></div>
+            <div style={{ fontSize: '10px', color: 'var(--neon-cyan)', fontWeight: 800 }}>LIVE LAP TIME</div>
+            <div ref={liveTimerRef} className="font-digital" style={{ fontSize: 'clamp(22px, 5vw, 32px)', color: 'white', textShadow: '0 0 15px rgba(255,255,255,0.4)' }}></div>
           </div>
           <button
             className="btn-danger"
@@ -597,14 +605,14 @@ export default function Cockpit() {
             onPointerLeave={cancelExitHold}
             onPointerCancel={cancelExitHold}
             style={{
-              position: 'relative', overflow: 'hidden', padding: '8px 16px',
-              background: 'rgba(255,0,0,0.1)', border: '1px solid var(--neon-red)', color: 'white',
-              touchAction: 'none', userSelect: 'none', justifySelf: 'end',
+              position: 'relative', overflow: 'hidden', padding: '12px 20px', minHeight: '44px',
+              background: 'rgba(255,0,0,0.15)', border: '2px solid var(--neon-red)', color: 'white',
+              touchAction: 'none', userSelect: 'none', justifySelf: 'end', fontSize: '13px', fontWeight: 900
             }}
           >
             <div style={{
               position: 'absolute', top: 0, left: 0, bottom: 0,
-              width: `${exitHoldProgress * 100}%`, background: 'rgba(255,0,0,0.5)',
+              width: `${exitHoldProgress * 100}%`, background: 'rgba(255,0,0,0.6)',
               transition: exitHoldProgress === 0 ? 'width 0.15s ease-out' : 'none',
             }} />
             <span style={{ position: 'relative' }}>PRZYTRZYMAJ ZAKOŃCZ</span>
@@ -631,34 +639,34 @@ export default function Cockpit() {
           </div>
         )}
 
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-          <div ref={deltaElRef} className="font-digital" style={{ fontSize: '48px', height: '60px', opacity: 0.9 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '12px' }}>
+          <div ref={deltaElRef} className="font-digital" style={{ fontSize: 'clamp(32px, 8vw, 48px)', height: '50px', opacity: 0.9 }}>
             {/* Delta goes here */}
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline' }}>
-            <div ref={speedElRef} className="font-digital" style={{ fontSize: '180px', color: 'white', lineHeight: 1, textShadow: '0 0 20px rgba(255,255,255,0.2)' }}></div>
-            <div style={{ color: '#aaa', fontSize: '32px', fontWeight: 800, marginLeft: '16px' }}>km/h</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div ref={speedElRef} className="font-digital" style={{ fontSize: 'clamp(90px, 20vw, 180px)', color: 'white', lineHeight: 1, textShadow: '0 0 20px rgba(255,255,255,0.2)' }}></div>
+            <div style={{ color: '#aaa', fontSize: 'clamp(20px, 4vw, 32px)', fontWeight: 800, marginLeft: '12px' }}>km/h</div>
           </div>
 
           {/* G-Force RPM Bar */}
-          <div style={{ width: '80%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', marginTop: '32px', overflow: 'hidden' }}>
+          <div style={{ width: '80%', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', marginTop: '24px', overflow: 'hidden' }}>
             <div ref={gForceBarRef} style={{ height: '100%', width: '0%', background: 'var(--neon-purple)', transition: 'width 0.1s linear, background 0.2s' }} />
           </div>
-          <div style={{ color: '#aaa', fontSize: '10px', marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>G-Force / Acceleration</div>
+          <div style={{ color: '#aaa', fontSize: '11px', marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>G-Force / Acceleration</div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2px', background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)' }}>
-          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '24px', textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: '#888', fontWeight: 800, marginBottom: '8px' }}>SEKTOR 1</div>
-            <div className="font-digital" style={{ fontSize: '28px', color: s1Time ? 'white' : '#555' }}>{s1Time ? (s1Time/1000).toFixed(3) : '--.---'}</div>
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px 8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800, marginBottom: '4px' }}>SEKTOR 1</div>
+            <div className="font-digital" style={{ fontSize: 'clamp(18px, 4vw, 28px)', color: s1Time ? 'white' : '#888899' }}>{s1Time ? (s1Time/1000).toFixed(3) : '--.---'}</div>
           </div>
-          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '24px', textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: '#888', fontWeight: 800, marginBottom: '8px' }}>SEKTOR 2</div>
-            <div className="font-digital" style={{ fontSize: '28px', color: s2Time ? 'white' : '#555' }}>{s2Time ? (s2Time/1000).toFixed(3) : '--.---'}</div>
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px 8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800, marginBottom: '4px' }}>SEKTOR 2</div>
+            <div className="font-digital" style={{ fontSize: 'clamp(18px, 4vw, 28px)', color: s2Time ? 'white' : '#888899' }}>{s2Time ? (s2Time/1000).toFixed(3) : '--.---'}</div>
           </div>
-          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '24px', textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: '#888', fontWeight: 800, marginBottom: '8px' }}>SEKTOR 3 (LAP)</div>
-            <div className="font-digital" style={{ fontSize: '28px', color: s3Time ? 'var(--neon-purple)' : '#555' }}>{s3Time ? (s3Time/1000).toFixed(3) : '--.---'}</div>
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px 8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800, marginBottom: '4px' }}>SEKTOR 3 (LAP)</div>
+            <div className="font-digital" style={{ fontSize: 'clamp(18px, 4vw, 28px)', color: s3Time ? 'var(--neon-purple)' : '#888899' }}>{s3Time ? (s3Time/1000).toFixed(3) : '--.---'}</div>
           </div>
         </div>
       </div>

@@ -4,7 +4,7 @@
 
 const STORAGE_KEY = 'flightdriving_pending_laps';
 
-type PendingLap = Record<string, unknown> & { _queueId: string };
+type PendingLap = Record<string, unknown> & { _queueId: string; _attempts?: number };
 
 function readQueue(): PendingLap[] {
   try {
@@ -25,7 +25,7 @@ function writeQueue(queue: PendingLap[]) {
 
 export function queueLap(lap: Record<string, unknown>): number {
   const queue = readQueue();
-  queue.push({ ...lap, _queueId: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
+  queue.push({ ...lap, _queueId: `${Date.now()}-${Math.random().toString(36).slice(2)}`, _attempts: 0 });
   writeQueue(queue);
   return queue.length;
 }
@@ -42,11 +42,14 @@ export async function flushLapQueue(
 
   const stillPending: PendingLap[] = [];
   for (const item of queue) {
-    const { _queueId, ...lapArgs } = item;
+    const { _queueId, _attempts = 0, ...lapArgs } = item;
     try {
       await recordLap(lapArgs);
     } catch {
-      stillPending.push(item);
+      const nextAttempts = _attempts + 1;
+      if (nextAttempts < 5) {
+        stillPending.push({ ...item, _attempts: nextAttempts });
+      }
     }
   }
 

@@ -23,7 +23,7 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("telemetry")
-      .filter((q) => q.eq(q.field("driverName"), args.driverName))
+      .withIndex("by_driverName", (q) => q.eq("driverName", args.driverName))
       .collect();
 
     if (existing.length === 0) {

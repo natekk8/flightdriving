@@ -9,30 +9,36 @@ export function initAudio() {
   }
 }
 
-export function playBeep(frequency: number, durationMs: number, type: OscillatorType = 'sine', volume: number = 1) {
+export function playBeep(frequency: number, durationMs: number, type: OscillatorType = 'sine', volume: number = 0.5) {
   if (!audioCtx) return;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   
-  osc.type = type;
-  osc.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+  const safeVol = Math.max(0.001, Math.min(volume, 0.7));
+  const startTime = audioCtx.currentTime;
+  const durationSec = durationMs / 1000;
   
-  gain.gain.setValueAtTime(volume, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + durationMs / 1000);
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, startTime);
+  
+  gain.gain.setValueAtTime(safeVol, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + durationSec);
   
   osc.connect(gain);
   gain.connect(audioCtx.destination);
   
-  osc.start();
-  osc.stop(audioCtx.currentTime + durationMs / 1000);
+  osc.start(startTime);
+  osc.stop(startTime + durationSec);
 }
 
-// F1 Start: 4 low short beeps, 1 long high beep
+// F1 Start: Low clean beep on each red light, high energetic beep on Lights Out (Go!)
 export function playF1StartBeep(isGo = false) {
   if (isGo) {
-    playBeep(800, 1000, 'square', 1); // Go!
+    playBeep(950, 700, 'sine', 0.7); // Lights Out / Go!
+    if (navigator.vibrate) navigator.vibrate([150, 50, 150]);
   } else {
-    playBeep(400, 300, 'square', 0.8); // Light ON
+    playBeep(450, 250, 'triangle', 0.5); // Light ON
+    if (navigator.vibrate) navigator.vibrate(60);
   }
 }
 

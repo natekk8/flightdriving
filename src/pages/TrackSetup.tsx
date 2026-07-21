@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { useMutation } from 'convex/react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useMutation, useQuery } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
 import L from 'leaflet';
@@ -15,17 +15,21 @@ export default function TrackSetup() {
   const [s2Index, setS2Index] = useState<number | undefined>();
   const [mode, setMode] = useState<'draw' | 's1' | 's2'>('draw');
   const [labelsVisible, setLabelsVisible] = useState(true);
+  const [showTrackList, setShowTrackList] = useState(false);
 
+  // @ts-ignore
+  const rawTracks = useQuery(api.tracks.getTracks);
+  const tracks = useMemo(() => rawTracks ?? [], [rawTracks]);
+  // @ts-ignore
   const saveTrack = useMutation(api.tracks.saveTrack);
+  // @ts-ignore
+  const deleteTrack = useMutation(api.tracks.deleteTrack);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
   const layerGroup = useRef<L.LayerGroup | null>(null);
   const labelsLayer = useRef<L.TileLayer | null>(null);
 
-  // Kept in sync with the s1Index/s2Index state so the click handler below
-  // (registered once, via a stable callback) can know whether a sector is
-  // already placed and needs its old point removed before re-placing it.
   const s1IndexRef = useRef<number | undefined>(undefined);
   const s2IndexRef = useRef<number | undefined>(undefined);
   useEffect(() => { s1IndexRef.current = s1Index; }, [s1Index]);
@@ -36,7 +40,7 @@ export default function TrackSetup() {
     
     leafletMap.current = L.map(mapRef.current, { zoomControl: false, maxBoundsViscosity: 1.0 }).setView([51.95, 20.15], 13);
     
-    // Satelite Map Darkened for OLED
+    // Satellite Map Darkened for OLED look
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19,
       attribution: 'Tiles &copy; Esri',
@@ -46,10 +50,6 @@ export default function TrackSetup() {
     labelsLayer.current = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19
     });
-    
-    if (labelsVisible) {
-      labelsLayer.current.addTo(leafletMap.current);
-    }
 
     layerGroup.current = L.layerGroup().addTo(leafletMap.current);
 
@@ -82,9 +82,6 @@ export default function TrackSetup() {
           if (currentMode === 's1' || currentMode === 's2') {
             if (currentPath.length < 2) return currentPath;
 
-            // If this sector was already placed, remove its previously
-            // auto-inserted point first so correcting a sector's position
-            // doesn't leave a stray extra point behind on the track.
             const oldIndex = currentMode === 's1' ? s1IndexRef.current : s2IndexRef.current;
             const workingPath = oldIndex !== undefined
               ? currentPath.filter((_, idx) => idx !== oldIndex)
@@ -125,17 +122,13 @@ export default function TrackSetup() {
               }
             }
 
-            // Snap distance threshold (150 pixels)
-            if (minDistance < 150) {
+            // Accurate snap distance threshold (35 screen pixels)
+            if (minDistance < 35) {
               const newLatLng = map.layerPointToLatLng(bestProjectedPt as any);
               const newPath = [...workingPath];
               newPath.splice(bestSegmentIndex + 1, 0, { lat: newLatLng.lat, lon: newLatLng.lng });
               const newIndex = bestSegmentIndex + 1;
 
-              // Re-index the *other* sector (if set) from its old position in
-              // currentPath to its new position in newPath, accounting for
-              // both the removal of this sector's old point and the
-              // insertion of its new one.
               const reindexOther = (idx: number | undefined) => {
                 if (idx === undefined) return idx;
                 let adjusted = idx;
@@ -154,7 +147,6 @@ export default function TrackSetup() {
           return currentPath;
         });
 
-        // Switch to the next logical step after placing a sector
         if (currentMode === 's1') return 's2';
         if (currentMode === 's2') return 'draw';
         return currentMode;
@@ -172,7 +164,6 @@ export default function TrackSetup() {
     if (!layerGroup.current) return;
     layerGroup.current.clearLayers();
 
-    // Draw path with colors based on sectors
     let s1 = s1Index ?? path.length;
     let s2 = s2Index ?? path.length;
 
@@ -184,7 +175,6 @@ export default function TrackSetup() {
     if (p2.length > 0) L.polyline(p2 as any, { color: '#f3123c', weight: 6, opacity: 0.8 }).addTo(layerGroup.current);
     if (p3.length > 0) L.polyline(p3 as any, { color: '#39ff14', weight: 6, opacity: 0.8 }).addTo(layerGroup.current);
 
-    // Draw pulsating sectors and regular points
     path.forEach((pt, idx) => {
       const isStart = idx === 0;
       const isFinish = idx === path.length - 1;
@@ -223,6 +213,29 @@ export default function TrackSetup() {
     setPath([]); setS1Index(undefined); setS2Index(undefined); setTrackName('');
   };
 
+  const handleUndoPoint = () => {
+    setPath(prev => {
+      if (prev.length === 0) return prev;
+      const newPath = prev.slice(0, -1);
+      const newLen = newPath.length;
+      if (s1Index !== undefined && s1Index >= newLen) setS1Index(undefined);
+      if (s2Index !== undefined && s2Index >= newLen) setS2Index(undefined);
+      return newPath;
+    });
+  };
+
+  const handleClearTrack = () => {
+    setPath([]);
+    setS1Index(undefined);
+    setS2Index(undefined);
+  };
+
+  const handleDeleteTrack = async (id: any, name: string) => {
+    if (window.confirm(`Czy na pewno chcesz usunąć trasę "${name}" wraz ze wszystkimi wynikami?`)) {
+      await deleteTrack({ id });
+    }
+  };
+
   const handleLocate = () => {
     if (leafletMap.current) {
       leafletMap.current.locate({ setView: true, maxZoom: 16 });
@@ -236,33 +249,37 @@ export default function TrackSetup() {
         initial={{ x: -100, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         className="glass-panel" 
-        style={{ padding: '24px', zIndex: 1000, position: 'absolute', top: '24px', left: '24px', width: '350px', display: 'flex', flexDirection: 'column', gap: '20px' }}
+        style={{
+          padding: '20px', zIndex: 1000, position: 'absolute', top: '16px', left: '16px',
+          width: 'clamp(280px, 90vw, 360px)', display: 'flex', flexDirection: 'column', gap: '16px',
+          maxHeight: 'calc(100vh - 90px)', overflowY: 'auto'
+        }}
       >
         <div>
-          <h2 style={{ margin: 0, borderLeft: '4px solid var(--neon-purple)', paddingLeft: '12px', fontSize: '20px', textTransform: 'uppercase' }}>Kreator Tras F1</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '8px' }}>
+          <h2 style={{ margin: 0, borderLeft: '4px solid var(--neon-purple)', paddingLeft: '12px', fontSize: '18px', textTransform: 'uppercase' }}>Kreator Tras F1</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '6px' }}>
             Rysuj tor, a następnie jednym kliknięciem przypinaj precyzyjnie sektory do wyrysowanej linii wyścigowej.
           </p>
         </div>
         
         <input 
           className="custom-input" 
-          placeholder="Nazwa trasy... (np. Szybka Nocna)" 
+          placeholder="Nazwa trasa... (np. Szybka Nocna)" 
           value={trackName} 
           onChange={e => setTrackName(e.target.value)} 
-          style={{ fontSize: '16px' }}
+          style={{ fontSize: '15px' }}
         />
 
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn-secondary" style={{ flex: 1, fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={handleLocate}>
-            <span style={{ fontSize: '16px' }}>📍</span> GPS
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn-secondary" style={{ flex: 1, fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleLocate}>
+            <span style={{ fontSize: '14px' }}>📍</span> GPS
           </button>
-          <button className="btn-secondary" style={{ flex: 1, fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={() => setLabelsVisible(!labelsVisible)}>
-            <span style={{ fontSize: '16px' }}>🗺️</span> {labelsVisible ? 'Ukryj' : 'Pokaż'} Ulice
+          <button className="btn-secondary" style={{ flex: 1, fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={() => setLabelsVisible(!labelsVisible)}>
+            <span style={{ fontSize: '14px' }}>🗺️</span> {labelsVisible ? 'Ukryj' : 'Pokaż'} Ulice
           </button>
         </div>
 
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '4px 0' }} />
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '2px 0' }} />
 
         <AnimatePresence mode="wait">
           <motion.div 
@@ -273,22 +290,41 @@ export default function TrackSetup() {
             style={{ 
               background: mode === 'draw' ? 'rgba(0, 240, 255, 0.1)' : mode === 's1' ? 'rgba(243, 18, 60, 0.1)' : 'rgba(255, 145, 0, 0.1)',
               border: `1px solid ${mode === 'draw' ? 'var(--neon-green)' : mode === 's1' ? 'var(--neon-red)' : 'var(--neon-orange)'}`,
-              padding: '12px', borderRadius: '12px', textAlign: 'center', color: 'white', fontWeight: 600, fontSize: '14px'
+              padding: '10px', borderRadius: '10px', textAlign: 'center', color: 'white', fontWeight: 600, fontSize: '13px'
             }}
           >
             {mode === 'draw' && 'Rysowanie Linii Wyścigowej (Klikaj na mapie)'}
-            {mode === 's1' && 'Wybieranie Sektora 1 (Kliknij na niebieską linię)'}
-            {mode === 's2' && 'Wybieranie Sektora 2 (Kliknij na czerwoną linię)'}
+            {mode === 's1' && 'Wybieranie Sektora 1 (Kliknij na linię)'}
+            {mode === 's2' && 'Wybieranie Sektora 2 (Kliknij na linię)'}
           </motion.div>
         </AnimatePresence>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <button 
             className={`btn-secondary ${mode === 'draw' ? 'active-draw' : ''}`} 
             onClick={() => setMode('draw')}
           >
             🖋️ Dodaj Punkty ({path.length})
           </button>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="btn-secondary"
+              style={{ flex: 1, fontSize: '11px', padding: '8px' }}
+              onClick={handleUndoPoint}
+              disabled={path.length === 0}
+            >
+              ↩ Cofnij Punkt
+            </button>
+            <button
+              className="btn-secondary"
+              style={{ flex: 1, fontSize: '11px', padding: '8px' }}
+              onClick={handleClearTrack}
+              disabled={path.length === 0}
+            >
+              🗑️ Wyczyszcz
+            </button>
+          </div>
           
           <button 
             className={`btn-secondary ${mode === 's1' ? 'active-s1' : ''}`} 
@@ -309,12 +345,46 @@ export default function TrackSetup() {
 
         <button
           className="btn-primary"
-          style={{ width: '100%', marginTop: '8px', letterSpacing: '2px', fontSize: '18px' }}
+          style={{ width: '100%', marginTop: '4px', letterSpacing: '1px', fontSize: '16px' }}
           onClick={handleSave}
           disabled={path.length < 2 || s1Index === undefined || s2Index === undefined}
         >
           ZAPISZ TRASĘ
         </button>
+
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '4px', paddingTop: '10px' }}>
+          <button
+            className="btn-secondary"
+            style={{ width: '100%', fontSize: '12px' }}
+            onClick={() => setShowTrackList(!showTrackList)}
+          >
+            📁 {showTrackList ? 'Ukryj Zapisane Trasy' : `Menedżer Tras (${tracks.length})`}
+          </button>
+
+          {showTrackList && (
+            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }}>
+              {tracks.length === 0 ? (
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', padding: '8px' }}>Brak zapisanych tras</div>
+              ) : (
+                tracks.map((t: any) => (
+                  <div key={t._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.04)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '13px', color: 'white' }}>{t.name}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{t.path?.length || 0} punktów</div>
+                    </div>
+                    <button
+                      className="btn-danger"
+                      style={{ padding: '4px 8px', fontSize: '11px' }}
+                      onClick={() => handleDeleteTrack(t._id, t.name)}
+                    >
+                      Usuń
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       </motion.div>
 
       <div ref={mapRef} style={{ flex: 1, width: '100%' }} />

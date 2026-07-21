@@ -19,7 +19,9 @@ export default defineSchema({
     lapTime: v.number(),
     topSpeed: v.optional(v.number()),
     timestamp: v.optional(v.number()),
-  }),
+  })
+    .index("by_trackId_vehicle", ["trackId", "vehicleType"])
+    .index("by_trackId", ["trackId"]),
   telemetry: defineTable({
     driverName: v.string(),
     vehicleType: v.union(v.literal("scooter"), v.literal("bike")),
@@ -30,7 +32,7 @@ export default defineSchema({
     heading: v.optional(v.number()),
     gForce: v.optional(v.number()), // Calculated from accelerometer
     timestamp: v.optional(v.number()),
-  }),
+  }).index("by_driverName", ["driverName"]),
   lights: defineTable({
     status: v.string(),
   })

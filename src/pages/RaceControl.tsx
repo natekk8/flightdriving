@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
@@ -16,11 +16,14 @@ export default function RaceControl() {
   const seenDriversRef = useRef<Set<string>>(new Set());
   
   // @ts-ignore
-  const tracks = useQuery(api.tracks.getTracks) || [];
+  const rawTracks = useQuery(api.tracks.getTracks);
+  const tracks = useMemo(() => rawTracks ?? [], [rawTracks]);
   // @ts-ignore
-  const laps = useQuery(api.laps.getTimingBoard, { trackId: selectedTrack || undefined, vehicleType: activeTab }) || [];
+  const rawLaps = useQuery(api.laps.getTimingBoard, { trackId: selectedTrack || undefined, vehicleType: activeTab });
+  const laps = useMemo(() => rawLaps ?? [], [rawLaps]);
   // @ts-ignore
-  const telemetry = useQuery(api.telemetry.get) || [];
+  const rawTelemetry = useQuery(api.telemetry.get);
+  const telemetry = useMemo(() => rawTelemetry ?? [], [rawTelemetry]);
   // @ts-ignore
   const clearBoard = useMutation(api.laps.clearBoard);
 
@@ -35,6 +38,13 @@ export default function RaceControl() {
   const focusMarkerRef = useRef<L.Marker | null>(null);
   const focusRafRef = useRef<number | null>(null);
 
+  // Auto-select first track if none selected
+  useEffect(() => {
+    if (!selectedTrack && tracks.length > 0) {
+      setSelectedTrack(tracks[0]._id);
+    }
+  }, [tracks, selectedTrack]);
+
   // Initialize Global Map
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
@@ -43,7 +53,8 @@ export default function RaceControl() {
     
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19,
-      attribution: 'Tiles &copy; Esri'
+      attribution: 'Tiles &copy; Esri',
+      className: 'map-tiles-dark'
     }).addTo(leafletMap.current);
 
     return () => {
@@ -130,9 +141,10 @@ export default function RaceControl() {
     }
 
     if (!focusLeafletMap.current) {
-      focusLeafletMap.current = L.map(focusMapRef.current).setView([51.95, 20.15], 18);
+      focusLeafletMap.current = L.map(focusMapRef.current, { zoomControl: false }).setView([51.95, 20.15], 18);
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 19,
+        className: 'map-tiles-dark'
       }).addTo(focusLeafletMap.current);
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 19
@@ -142,6 +154,12 @@ export default function RaceControl() {
       const icon = L.divIcon({ html, className: '', iconSize: [20, 20] });
       focusMarkerRef.current = L.marker([51.95, 20.15], { icon }).addTo(focusLeafletMap.current);
     }
+    
+    // Invalidate map size after animation container opens
+    const resizeTimer = setTimeout(() => {
+      focusLeafletMap.current?.invalidateSize();
+    }, 300);
+    return () => clearTimeout(resizeTimer);
   }, [focusedDriver]);
 
   // Focus Map Animation Loop
@@ -233,7 +251,7 @@ export default function RaceControl() {
           <option value="">-- Wybierz Trasę --</option>
           {tracks.map((t: any) => <option key={t._id} value={t._id}>{t.name}</option>)}
         </select>
-        <button className="btn-danger" style={{ transform: 'skewX(-12deg)', marginLeft: 'auto' }} onClick={() => { if (window.confirm('Czy na pewno chcesz zresetować wszystkie wyniki? (Tej akcji nie można cofnąć)')) { clearBoard(); } }}>Reset Wyników dla wybranej trasy</button>
+        <button className="btn-danger" style={{ transform: 'skewX(-12deg)', marginLeft: 'auto' }} onClick={() => { if (window.confirm('Czy na pewno chcesz zresetować wyniki dla tej trasy? (Tej akcji nie można cofnąć)')) { clearBoard({ trackId: selectedTrack || undefined }); } }}>Reset Wyników dla wybranej trasy</button>
       </div>
 
       {/* Top Stat Cards */}

@@ -9,16 +9,19 @@ export const getTimingBoard = query({
   handler: async (ctx, args) => {
     if (!args.trackId) return [];
     
-    let lapsQuery = ctx.db
-      .query("laps")
-      .filter((q) => q.eq(q.field("trackId"), args.trackId));
-      
-    const laps = await lapsQuery.collect();
-    
     if (args.vehicleType) {
-      return laps.filter(l => l.vehicleType === args.vehicleType);
+      return await ctx.db
+        .query("laps")
+        .withIndex("by_trackId_vehicle", (q) =>
+          q.eq("trackId", args.trackId!).eq("vehicleType", args.vehicleType!)
+        )
+        .collect();
     }
-    return laps;
+    
+    return await ctx.db
+      .query("laps")
+      .withIndex("by_trackId", (q) => q.eq("trackId", args.trackId!))
+      .collect();
   },
 });
 
@@ -41,9 +44,19 @@ export const record = mutation({
 });
 
 export const clearBoard = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const laps = await ctx.db.query("laps").collect();
+  args: {
+    trackId: v.optional(v.id("tracks")),
+  },
+  handler: async (ctx, args) => {
+    let laps;
+    if (args.trackId) {
+      laps = await ctx.db
+        .query("laps")
+        .withIndex("by_trackId", (q) => q.eq("trackId", args.trackId!))
+        .collect();
+    } else {
+      laps = await ctx.db.query("laps").collect();
+    }
     for (const lap of laps) {
       await ctx.db.delete(lap._id);
     }
