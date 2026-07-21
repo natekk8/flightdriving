@@ -258,7 +258,7 @@ export default function Cockpit() {
         gForceBarRef.current.style.background = pct > 80 ? 'var(--neon-red)' : 'var(--neon-purple)';
       }
       if (liveTimerRef.current) {
-        if (lapStartTimeLocalRef.current) {
+        if (lapStartTimeLocalRef.current !== null) {
           // Use purely local time difference for visual smoothness to avoid micro-stutters
           const elapsed = performance.now() - lapStartTimeLocalRef.current;
           liveTimerRef.current.innerText = (elapsed / 1000).toFixed(3);
