@@ -1,0 +1,195 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Outfit:wght@300;400;600;800&display=swap');
+
+:root {
+  --bg-black: #050508;
+  --card-bg: rgba(18, 18, 24, 0.45);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --neon-red: #f3123c;
+  --neon-green: #00f0ff; /* Cyan/mint as requested by old CSS */
+  --neon-purple: #9d4edd;
+  --neon-orange: #ff9100;
+  --text-main: #ffffff;
+  --text-secondary: #888899;
+  
+  --font-main: 'Outfit', sans-serif;
+  --font-mono: 'Orbitron', sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: radial-gradient(circle at top, #11111a 0%, #050508 100%);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  background-attachment: fixed;
+}
+
+.font-digital {
+  font-family: var(--font-mono);
+}
+
+/* Glassmorphism Panels */
+.glass-panel {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  backdrop-filter: blur(40px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(150%) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 16px !important;
+}
+
+/* Bento Grid */
+.bento-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* Stacked layout by default */
+  gap: 24px;
+}
+
+.bento-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+#card-timing {
+  grid-row: 1 / 3;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.card-header h3 {
+  border-left: 4px solid var(--neon-red);
+  padding-left: 12px;
+  font-family: 'Outfit', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 16px;
+  margin: 0;
+}
+
+/* Inputs & Selects */
+.custom-input, .custom-select {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  backdrop-filter: blur(10px);
+  color: #fff !important;
+  font-weight: 500;
+  padding: 12px 16px;
+  width: 100%;
+  outline: none;
+}
+
+.custom-input:focus, .custom-select:focus {
+  border-color: var(--neon-red) !important;
+  box-shadow: 0 0 15px rgba(243, 18, 60, 0.2) !important;
+}
+
+/* Buttons */
+button {
+  cursor: pointer;
+  border: none;
+  font-family: var(--font-main);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+  border-radius: 8px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #f3123c 0%, #ff4b2b 100%) !important;
+  box-shadow: 0 4px 15px rgba(243, 18, 60, 0.4) !important;
+  color: white;
+  padding: 16px 24px;
+  transform: skew(-8deg) !important;
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(243, 18, 60, 0.6) !important;
+  transform: skew(-8deg) translateY(-2px) !important;
+}
+
+.btn-danger {
+  background: rgba(255, 51, 102, 0.2);
+  color: var(--neon-red);
+  border: 1px solid var(--neon-red);
+  padding: 8px 16px;
+}
+
+.btn-danger:hover {
+  background: var(--neon-red);
+  color: white;
+}
+
+.btn-secondary {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--card-border);
+  color: white;
+  padding: 8px 16px;
+}
+
+.btn-secondary:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.btn-secondary.active {
+  background: rgba(0, 240, 255, 0.15);
+  border-color: var(--neon-green);
+  color: var(--neon-green);
+}
+
+/* Timing Table */
+.timing-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.timing-table th {
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.05);
+  padding: 12px;
+  text-align: left;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.timing-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--card-border);
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.timing-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.stat-pill {
+  flex: 1;
+  min-width: 80px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transform: skewX(-6deg);
+}
