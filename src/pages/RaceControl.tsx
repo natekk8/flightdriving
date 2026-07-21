@@ -4,10 +4,12 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import L from 'leaflet';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
 
 export default function RaceControl() {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<'scooter' | 'bike'>('scooter');
-  const [selectedTrack, setSelectedTrack] = useState('');
+  const [selectedTrack, setSelectedTrack] = useState(location.state?.trackId || '');
   const [focusedDriver, setFocusedDriver] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ id: number, text: string, driverName: string } | null>(null);
   
