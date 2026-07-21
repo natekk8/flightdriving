@@ -3,7 +3,7 @@ import { useMutation, useQuery } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
 import { checkLineIntersection, generateGateLine, GPSKalmanFilter, interpolateSubPoints, getDynamicGateWidth, calculateTrackProgress } from '../lib/math';
-import { initAudio, playF1StartBeep, playLapFinishBeep, speakRaceEngineerMessage } from '../lib/audio';
+import { initAudio, playF1StartBeep, playLapFinishBeep } from '../lib/audio';
 import { requestWakeLock, releaseWakeLock } from '../lib/wakelock';
 import { queueLap, flushLapQueue, getQueuedLapCount } from '../lib/offlineQueue';
 import L from 'leaflet';
@@ -184,7 +184,14 @@ export default function Cockpit() {
           setLights(0);
           setIsLightsOut(true);
           playF1StartBeep(true);
-          speakRaceEngineerMessage("Start! Dajesz gazu!");
+          
+          // Start the timer EXACTLY when lights go out and beep sounds!
+          const startMs = Date.now();
+          lapStartTimeRef.current = startMs;
+          lapStartTimeLocalRef.current = performance.now();
+          setS1Time(null);
+          setS2Time(null);
+          setS3Time(null);
           
           setTimeout(() => {
             setPhase('racing');
@@ -230,11 +237,6 @@ export default function Cockpit() {
 
         if (accuracy != null && accuracy > MAX_GPS_ACCURACY_METERS) {
           return;
-        }
-
-        if (lapStartTimeRef.current === null) {
-          lapStartTimeRef.current = rawTime;
-          lapStartTimeLocalRef.current = performance.now();
         }
 
         const filtered = filter.process(pos.coords.latitude, pos.coords.longitude, accuracy, rawTime);
@@ -314,12 +316,10 @@ export default function Cockpit() {
 
               if (nextGateIndex === 1 && hasS1) {
                 setS1Time(elapsed);
-                speakRaceEngineerMessage(`Sektor 1: ${(elapsed / 1000).toFixed(1)} sekundy`);
               }
               if (nextGateIndex === 2 && hasS2) {
                 const s2Val = elapsed - sectorTimes[0];
                 setS2Time(s2Val);
-                speakRaceEngineerMessage(`Sektor 2: ${(s2Val / 1000).toFixed(1)} sekundy`);
               }
 
               if (nextGateIndex === gates.length - 1) {
@@ -330,25 +330,16 @@ export default function Cockpit() {
                 }
 
                 const bestLap = bestLapRef.current;
-                let isPersonalBest = false;
                 if (bestLap) {
                   const delta = totalTime - bestLap.lapTime;
                   deltaRef.current = delta;
-                  if (delta < 0) isPersonalBest = true;
                 } else {
                   deltaRef.current = -1;
-                  isPersonalBest = true;
                 }
 
                 playLapFinishBeep();
                 setLapFlash(true);
                 setTimeout(() => setLapFlash(false), 2000);
-
-                if (isPersonalBest) {
-                  speakRaceEngineerMessage(`Meta! Rekord życiowy! ${(totalTime / 1000).toFixed(2)} sekundy`);
-                } else {
-                  speakRaceEngineerMessage(`Meta okrążenia! Czas: ${(totalTime / 1000).toFixed(2)} sekundy`);
-                }
 
                 {
                   const lapArgs = {
