@@ -32,6 +32,7 @@ export default function Cockpit() {
   const [errorName, setErrorName] = useState(false);
   const [errorTrack, setErrorTrack] = useState(false);
   const [trackConfigError, setTrackConfigError] = useState<string | null>(null);
+  // GPS permission/availability error shown to the driver
   const [gpsError, setGpsError] = useState<string | null>(null);
 
   // Real-time state (avoids React re-renders via refs)
@@ -58,9 +59,6 @@ export default function Cockpit() {
 
   const watchIdRef = useRef<number | null>(null);
   const motionHandlerRef = useRef<any>(null);
-
-  // GPS permission/availability error shown to the driver
-  const [gpsError, setGpsError] = useState<string | null>(null);
 
   // Laps that failed to sync to Convex and are waiting to be resent
   const [pendingLapCount, setPendingLapCount] = useState(0);
