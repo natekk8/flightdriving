@@ -21,6 +21,15 @@
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js');
         });
+        // Reload automatically once a newly deployed service worker takes
+        // control, so users always get the fresh build without manually
+        // clearing PWA/site cache.
+        let refreshingAfterUpdate = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshingAfterUpdate) return;
+          refreshingAfterUpdate = true;
+          window.location.reload();
+        });
       }
     </script>
   </body>
