@@ -174,7 +174,7 @@ export default function Cockpit() {
             
             if (nextGateIndex === 0) {
               lapStartTimeRef.current = exactTimestamp;
-              lapStartTimeLocalRef.current = Date.now();
+              lapStartTimeLocalRef.current = performance.now();
               nextGateIndex++;
             } else if (lapStartTimeRef.current !== null) {
               const elapsed = exactTimestamp - lapStartTimeRef.current;
@@ -212,7 +212,7 @@ export default function Cockpit() {
                 lapNumberRef.current++;
                 nextGateIndex = 1; 
                 lapStartTimeRef.current = exactTimestamp;
-                lapStartTimeLocalRef.current = Date.now();
+                lapStartTimeLocalRef.current = performance.now();
                 sectorTimes = [];
               } else {
                 nextGateIndex++;
@@ -260,7 +260,7 @@ export default function Cockpit() {
       if (liveTimerRef.current) {
         if (lapStartTimeLocalRef.current) {
           // Use purely local time difference for visual smoothness to avoid micro-stutters
-          const elapsed = Date.now() - lapStartTimeLocalRef.current;
+          const elapsed = performance.now() - lapStartTimeLocalRef.current;
           liveTimerRef.current.innerText = (elapsed / 1000).toFixed(3);
         } else {
           liveTimerRef.current.innerText = '0.000';
