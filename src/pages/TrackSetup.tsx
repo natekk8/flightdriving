@@ -23,6 +23,14 @@ export default function TrackSetup() {
   const layerGroup = useRef<L.LayerGroup | null>(null);
   const labelsLayer = useRef<L.TileLayer | null>(null);
 
+  // Kept in sync with the s1Index/s2Index state so the click handler below
+  // (registered once, via a stable callback) can know whether a sector is
+  // already placed and needs its old point removed before re-placing it.
+  const s1IndexRef = useRef<number | undefined>(undefined);
+  const s2IndexRef = useRef<number | undefined>(undefined);
+  useEffect(() => { s1IndexRef.current = s1Index; }, [s1Index]);
+  useEffect(() => { s2IndexRef.current = s2Index; }, [s2Index]);
+
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
     
@@ -73,16 +81,24 @@ export default function TrackSetup() {
           
           if (currentMode === 's1' || currentMode === 's2') {
             if (currentPath.length < 2) return currentPath;
-            
+
+            // If this sector was already placed, remove its previously
+            // auto-inserted point first so correcting a sector's position
+            // doesn't leave a stray extra point behind on the track.
+            const oldIndex = currentMode === 's1' ? s1IndexRef.current : s2IndexRef.current;
+            const workingPath = oldIndex !== undefined
+              ? currentPath.filter((_, idx) => idx !== oldIndex)
+              : currentPath;
+
             const map = leafletMap.current!;
             const clickPt = map.latLngToLayerPoint(e.latlng);
             let minDistance = Infinity;
             let bestSegmentIndex = -1;
             let bestProjectedPt: any = clickPt;
 
-            for (let i = 0; i < currentPath.length - 1; i++) {
-              const p1 = map.latLngToLayerPoint(L.latLng(currentPath[i].lat, currentPath[i].lon));
-              const p2 = map.latLngToLayerPoint(L.latLng(currentPath[i+1].lat, currentPath[i+1].lon));
+            for (let i = 0; i < workingPath.length - 1; i++) {
+              const p1 = map.latLngToLayerPoint(L.latLng(workingPath[i].lat, workingPath[i].lon));
+              const p2 = map.latLngToLayerPoint(L.latLng(workingPath[i+1].lat, workingPath[i+1].lon));
               
               const v = { x: p2.x - p1.x, y: p2.y - p1.y };
               const w = { x: clickPt.x - p1.x, y: clickPt.y - p1.y };
@@ -112,25 +128,28 @@ export default function TrackSetup() {
             // Snap distance threshold (150 pixels)
             if (minDistance < 150) {
               const newLatLng = map.layerPointToLatLng(bestProjectedPt as any);
-              const newPath = [...currentPath];
+              const newPath = [...workingPath];
               newPath.splice(bestSegmentIndex + 1, 0, { lat: newLatLng.lat, lon: newLatLng.lng });
-              
-              setS1Index(s1 => {
-                let newS1 = s1;
-                if (newS1 !== undefined && bestSegmentIndex < newS1) newS1++;
-                if (currentMode === 's1') return bestSegmentIndex + 1;
-                return newS1;
-              });
+              const newIndex = bestSegmentIndex + 1;
 
-              setS2Index(s2 => {
-                let newS2 = s2;
-                if (newS2 !== undefined && bestSegmentIndex < newS2) newS2++;
-                if (currentMode === 's2') return bestSegmentIndex + 1;
-                return newS2;
-              });
-              
+              // Re-index the *other* sector (if set) from its old position in
+              // currentPath to its new position in newPath, accounting for
+              // both the removal of this sector's old point and the
+              // insertion of its new one.
+              const reindexOther = (idx: number | undefined) => {
+                if (idx === undefined) return idx;
+                let adjusted = idx;
+                if (oldIndex !== undefined && oldIndex < adjusted) adjusted--;
+                if (bestSegmentIndex < adjusted) adjusted++;
+                return adjusted;
+              };
+
+              setS1Index(s1 => currentMode === 's1' ? newIndex : reindexOther(s1));
+              setS2Index(s2 => currentMode === 's2' ? newIndex : reindexOther(s2));
+
               return newPath;
             }
+            return currentPath;
           }
           return currentPath;
         });
@@ -196,6 +215,9 @@ export default function TrackSetup() {
 
   const handleSave = async () => {
     if (path.length < 2) return alert('Trasa musi mieć co najmniej 2 punkty!');
+    if (s1Index === undefined || s2Index === undefined) {
+      return alert('Trasa musi mieć ustawione oba sektory (S1 i S2) przed zapisem!');
+    }
     await saveTrack({ name: trackName || 'Nowa Trasa', path, s1Index, s2Index });
     alert('Zapisano pomyślnie!');
     setPath([]); setS1Index(undefined); setS2Index(undefined); setTrackName('');
@@ -276,16 +298,21 @@ export default function TrackSetup() {
             🏁 Ustaw Sektor 1
           </button>
 
-          <button 
-            className={`btn-secondary ${mode === 's2' ? 'active-s2' : ''}`} 
+          <button
+            className={`btn-secondary ${mode === 's2' ? 'active-s2' : ''}`}
             onClick={() => setMode('s2')}
-            disabled={!s1Index}
+            disabled={s1Index === undefined}
           >
             🏁 Ustaw Sektor 2
           </button>
         </div>
 
-        <button className="btn-primary" style={{ width: '100%', marginTop: '8px', letterSpacing: '2px', fontSize: '18px' }} onClick={handleSave}>
+        <button
+          className="btn-primary"
+          style={{ width: '100%', marginTop: '8px', letterSpacing: '2px', fontSize: '18px' }}
+          onClick={handleSave}
+          disabled={path.length < 2 || s1Index === undefined || s2Index === undefined}
+        >
           ZAPISZ TRASĘ
         </button>
       </motion.div>

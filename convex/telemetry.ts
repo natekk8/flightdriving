@@ -25,12 +25,19 @@ export const update = mutation({
       .query("telemetry")
       .filter((q) => q.eq(q.field("driverName"), args.driverName))
       .collect();
-      
-    for (const record of existing) {
-      await ctx.db.delete(record._id);
+
+    if (existing.length === 0) {
+      return await ctx.db.insert("telemetry", args);
     }
-    
-    return await ctx.db.insert("telemetry", args);
+
+    // Patch the existing record in place instead of delete+insert on every
+    // throttled update (called every ~250ms) to cut down on write load.
+    const [first, ...duplicates] = existing;
+    await ctx.db.patch(first._id, args);
+    for (const duplicate of duplicates) {
+      await ctx.db.delete(duplicate._id);
+    }
+    return first._id;
   },
 });
 

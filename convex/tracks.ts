@@ -16,6 +16,9 @@ export const saveTrack = mutation({
     s2Index: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    if (args.s1Index === undefined || args.s2Index === undefined) {
+      throw new Error("Trasa musi mieć ustawione sektory S1 i S2 przed zapisem.");
+    }
     return await ctx.db.insert("tracks", args);
   },
 });

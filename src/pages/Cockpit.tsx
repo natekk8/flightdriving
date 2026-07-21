@@ -83,7 +83,13 @@ export default function Cockpit() {
   const userMarker = useRef<L.Marker | null>(null);
   const trackPathLayer = useRef<L.Polyline | null>(null);
 
-  const bestLap = [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime)[0];
+  // Kept in a ref (rather than a plain variable) so the watchPosition
+  // callback - which closes over it once when the race starts - always
+  // sees the latest best lap, including laps recorded during this session.
+  const bestLapRef = useRef<any>(null);
+  useEffect(() => {
+    bestLapRef.current = [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime)[0] ?? null;
+  }, [laps]);
 
   // Validates that the selected track has a usable path and, if defined,
   // sector gates in sane positions before a race is allowed to start.
@@ -244,16 +250,25 @@ export default function Cockpit() {
             } else if (lapStartTimeRef.current !== null) {
               const elapsed = exactTimestamp - lapStartTimeRef.current;
               sectorTimes.push(elapsed);
-              
-              if (nextGateIndex === 1 && gates.length > 2) setS1Time(elapsed);
-              if (nextGateIndex === 2 && gates.length > 3) setS2Time(elapsed - sectorTimes[0]);
-              
+
+              // hasS1/hasS2 reflect which sector gates actually exist for
+              // this track - used instead of fragile array-length-based
+              // indexing so partially-configured tracks (e.g. only S1) don't
+              // produce bogus/undefined sector values.
+              const hasS1 = gates.length > 2;
+              const hasS2 = gates.length > 3;
+
+              if (nextGateIndex === 1 && hasS1) setS1Time(elapsed);
+              if (nextGateIndex === 2 && hasS2) setS2Time(elapsed - sectorTimes[0]);
+
               if (nextGateIndex === gates.length - 1) {
                 const totalTime = elapsed;
-                if (gates.length > 2) {
-                    setS3Time(totalTime - sectorTimes[sectorTimes.length - 2]);
+                if (hasS1) {
+                  const lastSectorBoundary = hasS2 ? sectorTimes[1] : sectorTimes[0];
+                  setS3Time(totalTime - lastSectorBoundary);
                 }
-                
+
+                const bestLap = bestLapRef.current;
                 if (bestLap) {
                   const delta = totalTime - bestLap.lapTime;
                   deltaRef.current = delta;
@@ -269,9 +284,9 @@ export default function Cockpit() {
                   const lapArgs = {
                     driverName, vehicleType, trackId: track._id,
                     lapNumber: lapNumberRef.current, lapTime: totalTime,
-                    s1: sectorTimes[0],
-                    s2: gates.length > 2 ? (sectorTimes[1] - sectorTimes[0]) : undefined,
-                    s3: gates.length > 3 ? (totalTime - sectorTimes[1]) : (gates.length > 2 ? (totalTime - sectorTimes[0]) : undefined),
+                    s1: hasS1 ? sectorTimes[0] : undefined,
+                    s2: hasS2 ? (sectorTimes[1] - sectorTimes[0]) : undefined,
+                    s3: hasS1 ? (totalTime - (hasS2 ? sectorTimes[1] : sectorTimes[0])) : undefined,
                     topSpeed: maxSpeedRef.current, timestamp: Date.now()
                   };
                   recordLap(lapArgs).catch(() => {
@@ -513,13 +528,13 @@ export default function Cockpit() {
           <div style={{ display: 'flex', gap: '16px', background: '#050505', padding: '24px', borderRadius: '16px', border: '1px solid #222' }}>
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: '#0a0a0a', borderRadius: '12px' }}>
-                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: lights >= i ? '#ff0000' : (lights === -1 ? '#000' : '#111'), boxShadow: lights >= i ? '0 0 40px #ff0000' : 'none' }} />
-                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: lights >= i ? '#ff0000' : (lights === -1 ? '#000' : '#111'), boxShadow: lights >= i ? '0 0 40px #ff0000' : 'none' }} />
+                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: lights >= i ? '#ff0000' : '#111', boxShadow: lights >= i ? '0 0 40px #ff0000' : 'none' }} />
+                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: lights >= i ? '#ff0000' : '#111', boxShadow: lights >= i ? '0 0 40px #ff0000' : 'none' }} />
               </div>
             ))}
           </div>
           <h1 style={{ marginTop: '48px', color: 'white', fontFamily: 'var(--font-mono)', fontSize: '48px' }}>
-            {lights === -1 ? 'GO GO GO!' : 'CZEKAJ NA SYGNAŁ...'}
+            CZEKAJ NA SYGNAŁ...
           </h1>
         </div>
       )}
@@ -561,9 +576,12 @@ export default function Cockpit() {
         )}
       </AnimatePresence>
 
-      {/* Main OLED HUD Layer */}
+      {/* Main OLED HUD Layer - only during the race itself, so the light
+          sequence stays on a plain black screen with no speed/timer/name
+          bleeding through underneath. */}
+      {phase === 'racing' && (
       <div style={{ zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', padding: '24px' }}>
           <div>
             <span style={{ color: 'var(--neon-green)', fontWeight: 800, fontSize: '24px', textShadow: '0 0 10px rgba(0,255,136,0.5)' }}>{driverName}</span>
             <span style={{ color: '#aaa', marginLeft: '12px', fontSize: '14px', textTransform: 'uppercase' }}>{vehicleType}</span>
@@ -581,7 +599,7 @@ export default function Cockpit() {
             style={{
               position: 'relative', overflow: 'hidden', padding: '8px 16px',
               background: 'rgba(255,0,0,0.1)', border: '1px solid var(--neon-red)', color: 'white',
-              touchAction: 'none', userSelect: 'none',
+              touchAction: 'none', userSelect: 'none', justifySelf: 'end',
             }}
           >
             <div style={{
@@ -621,7 +639,7 @@ export default function Cockpit() {
             <div ref={speedElRef} className="font-digital" style={{ fontSize: '180px', color: 'white', lineHeight: 1, textShadow: '0 0 20px rgba(255,255,255,0.2)' }}></div>
             <div style={{ color: '#aaa', fontSize: '32px', fontWeight: 800, marginLeft: '16px' }}>km/h</div>
           </div>
-          
+
           {/* G-Force RPM Bar */}
           <div style={{ width: '80%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', marginTop: '32px', overflow: 'hidden' }}>
             <div ref={gForceBarRef} style={{ height: '100%', width: '0%', background: 'var(--neon-purple)', transition: 'width 0.1s linear, background 0.2s' }} />
@@ -644,6 +662,7 @@ export default function Cockpit() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

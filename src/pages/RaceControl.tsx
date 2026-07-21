@@ -186,6 +186,12 @@ export default function RaceControl() {
   const activeDriverTelemetry =
     activeTelemetryNow.find((t: any) => t.driverName === bestLap?.driverName) ||
     activeTelemetryNow[0];
+  // Drivers currently on track but who haven't completed a lap yet - shown
+  // in Live Timing as "in progress" so you don't have to wait for their
+  // first lap to finish to see who's racing.
+  const inProgressDrivers = activeTelemetryNow.filter((t: any) =>
+    !sortedLaps.some((l: any) => l.driverName === t.driverName)
+  );
 
   return (
     <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', position: 'relative' }}>
@@ -272,6 +278,9 @@ export default function RaceControl() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div>
               <span style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Aktualna prędkość{bestLap ? ' (Lider)' : ''}</span>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: activeDriverTelemetry ? 'white' : 'var(--text-secondary)', marginTop: '4px' }}>
+                {activeDriverTelemetry ? activeDriverTelemetry.driverName : 'Brak aktywnego kierowcy'}
+              </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
                 <span className="font-digital" style={{ fontSize: '64px', color: 'var(--neon-green)', textShadow: '0 0 20px rgba(0,255,136,0.4)' }}>
                   {activeDriverTelemetry ? Math.round(activeDriverTelemetry.speed) : 0}
@@ -411,7 +420,29 @@ export default function RaceControl() {
                   );
                 })}
               </AnimatePresence>
-              {sortedLaps.length === 0 && (
+              <AnimatePresence>
+                {inProgressDrivers.map((t: any) => (
+                  <motion.tr
+                    key={`in-progress-${t._id}`}
+                    layout
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    style={{ background: 'rgba(0, 240, 255, 0.05)' }}
+                  >
+                    <td style={{ color: 'var(--text-secondary)', fontWeight: 900, fontSize: '18px' }}>—</td>
+                    <td style={{ fontWeight: 800, fontSize: '16px', color: 'white' }}>{t.driverName}</td>
+                    <td style={{ color: '#555' }}>---</td>
+                    <td style={{ color: '#555' }}>---</td>
+                    <td style={{ color: '#555' }}>---</td>
+                    <td style={{ color: 'var(--neon-blue)', fontWeight: 800, fontSize: '13px', textTransform: 'uppercase' }}>W trakcie okrążenia...</td>
+                    <td style={{ color: 'var(--neon-orange)' }}>{Math.round(t.speed || 0)} km/h</td>
+                    <td style={{ color: 'var(--text-secondary)' }}>—</td>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
+              {sortedLaps.length === 0 && inProgressDrivers.length === 0 && (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
                     Brak wyników. Czekamy na czasy okrążeń!
