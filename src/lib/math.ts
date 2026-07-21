@@ -40,11 +40,15 @@ export function interpolateSubPoints(p1: Point, p2: Point, steps = 5): Point[] {
 
 // Generates a perpendicular gate line (width in meters) at a specific point on the path
 export function generateGateLine(path: Point[], index: number, widthMeters = 40): [Point, Point] {
-  if (path.length < 2) return [path[0], path[0]];
+  if (!path || path.length < 2) {
+    const fallback = path && path[0] ? path[0] : { lat: 0, lon: 0 };
+    return [fallback, fallback];
+  }
   
-  const p1 = path[index];
-  const p0 = index > 0 ? path[index - 1] : p1;
-  const p2 = index < path.length - 1 ? path[index + 1] : p1;
+  const safeIndex = Math.max(0, Math.min(index ?? 0, path.length - 1));
+  const p1 = path[safeIndex];
+  const p0 = safeIndex > 0 ? path[safeIndex - 1] : p1;
+  const p2 = safeIndex < path.length - 1 ? path[safeIndex + 1] : p1;
   
   const cosLat = Math.cos(toRad(p1.lat));
   

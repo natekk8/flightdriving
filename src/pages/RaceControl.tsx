@@ -386,52 +386,161 @@ export default function RaceControl() {
       )}
 
       {/* 2-Driver Comparative Telemetry Overlay Modal */}
-      {showCompareModal && (
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="glass-panel"
-          style={{ padding: '24px', marginBottom: '24px', border: '1px solid var(--neon-purple)', background: 'rgba(10, 10, 20, 0.95)' }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ margin: 0, color: 'var(--neon-purple)' }}>PORÓWNYWARKA TELEMETRII 2 KIEROWCÓW</h3>
-            <button className="btn-danger" style={{ padding: '4px 12px', fontSize: '12px' }} onClick={() => setShowCompareModal(false)}>✕ ZAMKNIJ</button>
-          </div>
+      {showCompareModal && (() => {
+        const driverALap = compareDriverA ? sortedLaps.find((l: any) => l.driverName === compareDriverA) : null;
+        const driverBLap = compareDriverB ? sortedLaps.find((l: any) => l.driverName === compareDriverB) : null;
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-            <div>
-              <label style={{ fontSize: '12px', color: 'var(--neon-green)', fontWeight: 700 }}>KIEROWCA A (ZIELONY)</label>
-              <select className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverA} onChange={e => setCompareDriverA(e.target.value)}>
-                <option value="">Wybierz...</option>
-                {sortedLaps.map((l: any) => <option key={l._id} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: '12px', color: 'var(--neon-purple)', fontWeight: 700 }}>KIEROWCA B (FIOLETOWY)</label>
-              <select className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverB} onChange={e => setCompareDriverB(e.target.value)}>
-                <option value="">Wybierz...</option>
-                {sortedLaps.map((l: any) => <option key={l._id} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
-              </select>
-            </div>
-          </div>
+        const driverATelem = compareDriverA ? telemetry.find((t: any) => t.driverName === compareDriverA) : null;
+        const driverBTelem = compareDriverB ? telemetry.find((t: any) => t.driverName === compareDriverB) : null;
 
-          {/* SVG Comparative Graph */}
-          <div style={{ background: '#050510', borderRadius: '12px', padding: '16px', height: '180px', position: 'relative', border: '1px solid #222' }}>
-            <div style={{ fontSize: '11px', color: '#888', marginBottom: '8px' }}>NAKŁADANIE TELEMETRII PRĘDKOŚCI NA TRASIE (0% ➔ 100%)</div>
-            <svg width="100%" height="130" viewBox="0 0 500 100" preserveAspectRatio="none">
-              {/* Grid Lines */}
-              <line x1="0" y1="25" x2="500" y2="25" stroke="#222" strokeDasharray="4" />
-              <line x1="0" y1="50" x2="500" y2="50" stroke="#222" strokeDasharray="4" />
-              <line x1="0" y1="75" x2="500" y2="75" stroke="#222" strokeDasharray="4" />
-              
-              {/* Driver A Curve (Green) */}
-              <path d="M0,80 Q100,20 200,60 T400,30 T500,70" fill="none" stroke="var(--neon-green)" strokeWidth="3" />
-              {/* Driver B Curve (Purple) */}
-              <path d="M0,90 Q120,40 220,70 T380,10 T500,60" fill="none" stroke="var(--neon-purple)" strokeWidth="3" />
-            </svg>
-          </div>
-        </motion.div>
-      )}
+        const maxSpeed = Math.max(
+          driverALap?.topSpeed || 0, driverBLap?.topSpeed || 0,
+          driverATelem?.speed || 0, driverBTelem?.speed || 0, 30
+        );
+
+        const speedToY = (speed: number) => Math.round(115 - (Math.min(speed, maxSpeed) / maxSpeed) * 90);
+
+        // Driver A SVG path calculation
+        let pathAData = '';
+        if (driverALap || driverATelem) {
+          const y0 = speedToY(15);
+          const y1 = speedToY(driverALap?.s1 ? Math.min(maxSpeed, (450000 / driverALap.s1) * 3) : (driverATelem?.speed || 25));
+          const y2 = speedToY(driverALap?.s2 ? Math.min(maxSpeed, (450000 / driverALap.s2) * 3) : (driverATelem?.speed || 28));
+          const y3 = speedToY(driverALap?.topSpeed || driverATelem?.speed || maxSpeed * 0.9);
+          const y4 = speedToY(driverALap?.s3 ? Math.min(maxSpeed, (450000 / driverALap.s3) * 3) : 20);
+          pathAData = `M 20,${y0} Q 95,${y0 - 5} 170,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+        }
+
+        // Driver B SVG path calculation
+        let pathBData = '';
+        if (driverBLap || driverBTelem) {
+          const y0 = speedToY(12);
+          const y1 = speedToY(driverBLap?.s1 ? Math.min(maxSpeed, (450000 / driverBLap.s1) * 3) : (driverBTelem?.speed || 22));
+          const y2 = speedToY(driverBLap?.s2 ? Math.min(maxSpeed, (450000 / driverBLap.s2) * 3) : (driverBTelem?.speed || 26));
+          const y3 = speedToY(driverBLap?.topSpeed || driverBTelem?.speed || maxSpeed * 0.85);
+          const y4 = speedToY(driverBLap?.s3 ? Math.min(maxSpeed, (450000 / driverBLap.s3) * 3) : 18);
+          pathBData = `M 20,${y0} Q 95,${y0 - 5} 170,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+        }
+
+        const lapTimeDelta = (driverALap?.lapTime && driverBLap?.lapTime)
+          ? ((driverALap.lapTime - driverBLap.lapTime) / 1000).toFixed(3)
+          : null;
+
+        return (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-panel"
+            style={{ padding: '24px', marginBottom: '24px', border: '1px solid var(--neon-purple)', background: 'rgba(10, 10, 20, 0.95)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, color: 'var(--neon-purple)' }}>PORÓWNYWARKA TELEMETRII 2 KIEROWCÓW</h3>
+              <button className="btn-danger" style={{ padding: '4px 12px', fontSize: '12px' }} onClick={() => setShowCompareModal(false)}>✕ ZAMKNIJ</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--neon-green)', fontWeight: 700 }}>KIEROWCA A (ZIELONY)</label>
+                <select className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverA} onChange={e => setCompareDriverA(e.target.value)}>
+                  <option value="">Wybierz Kierowcę A...</option>
+                  {sortedLaps.map((l: any) => <option key={`comp-a-${l._id}`} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--neon-purple)', fontWeight: 700 }}>KIEROWCA B (FIOLETOWY)</label>
+                <select className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverB} onChange={e => setCompareDriverB(e.target.value)}>
+                  <option value="">Wybierz Kierowcę B...</option>
+                  {sortedLaps.map((l: any) => <option key={`comp-b-${l._id}`} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* SVG Comparative Graph */}
+            <div style={{ background: '#050510', borderRadius: '12px', padding: '16px', height: '180px', position: 'relative', border: '1px solid #222', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ fontSize: '11px', color: '#888' }}>WYKRES PRĘDKOŚCI NA TRASIE (0% ➔ 100%)</div>
+                {maxSpeed > 0 && (
+                  <div style={{ fontSize: '10px', color: 'var(--neon-cyan)' }}>V MAX SCALE: {Math.round(maxSpeed)} km/h</div>
+                )}
+              </div>
+
+              {(!compareDriverA && !compareDriverB) ? (
+                <div style={{ height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888899', fontSize: '13px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px stroke rgba(255,255,255,0.05)' }}>
+                  <span>⚠️ Wybierz co najmniej jednego kierowcę z rozwijanego menu powyżej, aby wygenerować i porównać ich wykresy telemetrii.</span>
+                </div>
+              ) : (
+                <svg width="100%" height="120" viewBox="0 0 500 130" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                  {/* Grid Lines */}
+                  <line x1="20" y1="25" x2="480" y2="25" stroke="#222" strokeDasharray="4" />
+                  <line x1="20" y1="70" x2="480" y2="70" stroke="#222" strokeDasharray="4" />
+                  <line x1="20" y1="115" x2="480" y2="115" stroke="#222" strokeDasharray="4" />
+                  
+                  {/* Sector markers */}
+                  <line x1="170" y1="15" x2="170" y2="115" stroke="rgba(255,255,255,0.08)" strokeDasharray="2" />
+                  <text x="172" y="24" fill="#666" fontSize="9">S1</text>
+                  <line x1="320" y1="15" x2="320" y2="115" stroke="rgba(255,255,255,0.08)" strokeDasharray="2" />
+                  <text x="322" y="24" fill="#666" fontSize="9">S2</text>
+
+                  {/* Driver A Curve (Green) */}
+                  {pathAData && (
+                    <path d={pathAData} fill="none" stroke="var(--neon-green)" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                  )}
+                  {/* Driver B Curve (Purple) */}
+                  {pathBData && (
+                    <path d={pathBData} fill="none" stroke="var(--neon-purple)" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                  )}
+                </svg>
+              )}
+            </div>
+
+            {/* Telemetry Comparison Table */}
+            {(driverALap || driverBLap) && (
+              <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: '10px', color: '#888' }}>CZAS OKRĄŻENIA</div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'white' }}>
+                    <span style={{ color: 'var(--neon-green)' }}>{driverALap ? (driverALap.lapTime/1000).toFixed(3) : '--'}s</span>
+                    <span style={{ color: '#666', margin: '0 4px' }}>vs</span>
+                    <span style={{ color: 'var(--neon-purple)' }}>{driverBLap ? (driverBLap.lapTime/1000).toFixed(3) : '--'}s</span>
+                  </div>
+                  {lapTimeDelta !== null && (
+                    <div style={{ fontSize: '11px', marginTop: '2px', color: Number(lapTimeDelta) < 0 ? 'var(--neon-green)' : 'var(--neon-purple)' }}>
+                      Δ {Number(lapTimeDelta) < 0 ? `${lapTimeDelta}s (A szybszy)` : `+${lapTimeDelta}s (B szybszy)`}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: '10px', color: '#888' }}>SEKTOR 1</div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'white' }}>
+                    <span style={{ color: 'var(--neon-green)' }}>{driverALap?.s1 ? (driverALap.s1/1000).toFixed(3) : '--'}s</span>
+                    <span style={{ color: '#666', margin: '0 4px' }}>vs</span>
+                    <span style={{ color: 'var(--neon-purple)' }}>{driverBLap?.s1 ? (driverBLap.s1/1000).toFixed(3) : '--'}s</span>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: '10px', color: '#888' }}>SEKTOR 2</div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'white' }}>
+                    <span style={{ color: 'var(--neon-green)' }}>{driverALap?.s2 ? (driverALap.s2/1000).toFixed(3) : '--'}s</span>
+                    <span style={{ color: '#666', margin: '0 4px' }}>vs</span>
+                    <span style={{ color: 'var(--neon-purple)' }}>{driverBLap?.s2 ? (driverBLap.s2/1000).toFixed(3) : '--'}s</span>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: '10px', color: '#888' }}>V MAX</div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'white' }}>
+                    <span style={{ color: 'var(--neon-green)' }}>{driverALap?.topSpeed ? Math.round(driverALap.topSpeed) : '--'} km/h</span>
+                    <span style={{ color: '#666', margin: '0 4px' }}>vs</span>
+                    <span style={{ color: 'var(--neon-purple)' }}>{driverBLap?.topSpeed ? Math.round(driverBLap.topSpeed) : '--'} km/h</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        );
+      })()}
 
       {/* Top Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '24px' }}>

@@ -1,23 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Outfit:wght@300;400;600;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800;900&family=Outfit:wght@300;400;600;700;800;900&display=swap');
 
 :root {
-  --bg-black: #050508;
-  --card-bg: rgba(18, 18, 24, 0.55);
-  --card-border: rgba(255, 255, 255, 0.1);
+  --bg-black: #07070a;
+  --card-bg: rgba(16, 18, 27, 0.65);
+  --card-border: rgba(255, 255, 255, 0.12);
+  --f1-red: #e10600;
   --neon-red: #f3123c;
   --neon-cyan: #00f0ff;
   --neon-green: #39ff14;
-  --neon-purple: #9d4edd;
+  --neon-purple: #b000ff;
   --neon-orange: #ff9100;
+  --neon-yellow: #ffee00;
   --text-main: #ffffff;
-  --text-secondary: #888899;
+  --text-secondary: #9090a8;
+  --text-muted: #606078;
   
-  --font-main: 'Outfit', sans-serif;
-  --font-mono: 'Orbitron', sans-serif;
+  --font-main: 'Outfit', -apple-system, sans-serif;
+  --font-mono: 'Orbitron', monospace;
+  --font-tech: 'Share Tech Mono', monospace;
   --radius-sm: 8px;
   --radius-md: 12px;
+  --radius-lg: 20px;
 }
 
 * {
@@ -26,8 +31,29 @@
   padding: 0;
 }
 
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #090a0f;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--f1-red);
+}
+
 body {
-  background: radial-gradient(circle at top, #11111a 0%, #050508 100%);
+  background: #07070a;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(225, 6, 0, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 100% 100%, rgba(0, 240, 255, 0.06) 0%, transparent 50%),
+    linear-gradient(to bottom, rgba(7, 7, 10, 0.95), rgba(7, 7, 10, 0.98)),
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255, 255, 255, 0.015) 2px, rgba(255, 255, 255, 0.015) 4px);
   color: var(--text-main);
   font-family: var(--font-main);
   -webkit-font-smoothing: antialiased;
@@ -40,23 +66,45 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.font-tech {
+  font-family: var(--font-tech);
+}
+
+/* Carbon Fiber Subtle Pattern */
+.carbon-bg {
+  background-color: #0b0c10;
+  background-image: 
+    linear-gradient(27deg, #12131a 5px, transparent 5px),
+    linear-gradient(207deg, #12131a 5px, transparent 5px),
+    linear-gradient(27deg, #12131a 5px, transparent 5px),
+    linear-gradient(207deg, #12131a 5px, transparent 5px);
+  background-size: 10px 10px;
+  background-position: 0 0, 5px 2.5px, 5px 5px, 0 2.5px;
+}
+
 /* Glassmorphism Panels */
 .glass-panel {
   background: var(--card-bg) !important;
   border: 1px solid var(--card-border) !important;
-  border-top: 1px solid rgba(255,255,255,0.2) !important;
-  border-left: 1px solid rgba(255,255,255,0.15) !important;
-  backdrop-filter: blur(40px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255,255,255,0.02) !important;
-  border-radius: 20px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.18) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), inset 0 0 15px rgba(255,255,255,0.02) !important;
+  border-radius: var(--radius-lg) !important;
 }
 
-/* Bento Grid */
+/* Bento Grid System */
 .bento-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 24px;
+  gap: 20px;
+}
+
+@media (min-width: 1024px) {
+  .bento-grid-2col {
+    grid-template-columns: 2fr 1fr;
+  }
 }
 
 .bento-card {
@@ -73,63 +121,66 @@ body {
 }
 
 .card-header h3 {
-  border-left: 4px solid var(--neon-red);
+  border-left: 4px solid var(--f1-red);
   padding-left: 12px;
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-main);
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  font-size: 18px;
+  letter-spacing: 1.5px;
+  font-size: 16px;
   margin: 0;
+  color: #fff;
 }
 
 /* Inputs & Selects */
 .custom-input, .custom-select {
-  background: rgba(0, 0, 0, 0.4) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background: rgba(8, 9, 14, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
   border-radius: 12px !important;
   color: #fff !important;
-  font-weight: 500;
+  font-weight: 600;
   padding: 14px 18px;
   width: 100%;
   outline: none;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);
   color-scheme: dark;
+  font-size: 14px;
 }
 
 .custom-input:focus, .custom-select:focus {
-  border-color: var(--neon-green) !important;
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.3), inset 0 2px 10px rgba(0,0,0,0.5) !important;
-  background: rgba(0, 240, 255, 0.05) !important;
+  border-color: var(--neon-cyan) !important;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.35), inset 0 2px 8px rgba(0,0,0,0.6) !important;
+  background: rgba(0, 240, 255, 0.08) !important;
 }
 
-/* Buttons */
+/* F1 Buttons */
 button {
   cursor: pointer;
   border: none;
   font-family: var(--font-main);
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 1.2px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 12px;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #f3123c 0%, #ff4b2b 100%) !important;
-  box-shadow: 0 8px 25px rgba(243, 18, 60, 0.5), inset 0 2px 5px rgba(255,255,255,0.3) !important;
+  background: linear-gradient(135deg, #e10600 0%, #ff3b30 100%) !important;
+  box-shadow: 0 6px 20px rgba(225, 6, 0, 0.5), inset 0 2px 4px rgba(255,255,255,0.4) !important;
   color: white;
-  padding: 16px 24px;
+  padding: 14px 24px;
   transform: skew(-8deg) !important;
 }
 
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 12px 30px rgba(243, 18, 60, 0.8), inset 0 2px 5px rgba(255,255,255,0.3) !important;
-  transform: skew(-8deg) translateY(-3px) scale(1.02) !important;
+  box-shadow: 0 10px 30px rgba(225, 6, 0, 0.8), inset 0 2px 4px rgba(255,255,255,0.4) !important;
+  transform: skew(-8deg) translateY(-2px) scale(1.02) !important;
 }
 
 .btn-danger {
-  background: rgba(255, 51, 102, 0.1);
+  background: rgba(243, 18, 60, 0.12);
   color: var(--neon-red);
   border: 1px solid rgba(243, 18, 60, 0.4);
   padding: 10px 18px;
@@ -139,61 +190,52 @@ button {
   background: rgba(243, 18, 60, 0.3);
   border-color: var(--neon-red);
   color: white;
-  box-shadow: 0 0 15px rgba(243,18,60,0.5);
+  box-shadow: 0 0 20px rgba(243,18,60,0.6);
   transform: translateY(-2px);
 }
 
 .btn-secondary {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
   color: white;
   padding: 12px 18px;
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.35);
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
 }
 
 .btn-secondary:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* Editor States */
+/* Active Editor Tool Buttons */
 .active-draw {
-  background: rgba(0, 240, 255, 0.15);
-  border-color: var(--neon-green);
-  color: var(--neon-green);
-  box-shadow: 0 0 20px rgba(0,240,255,0.2);
-}
-.active-draw:hover {
-  background: rgba(0, 240, 255, 0.25) !important;
+  background: rgba(0, 240, 255, 0.18) !important;
+  border-color: var(--neon-cyan) !important;
+  color: var(--neon-cyan) !important;
+  box-shadow: 0 0 20px rgba(0,240,255,0.3) !important;
 }
 
 .active-s1 {
-  background: rgba(243, 18, 60, 0.15);
-  border-color: var(--neon-red);
-  color: var(--neon-red);
-  box-shadow: 0 0 20px rgba(243,18,60,0.2);
-}
-.active-s1:hover {
-  background: rgba(243, 18, 60, 0.25) !important;
+  background: rgba(243, 18, 60, 0.18) !important;
+  border-color: var(--neon-red) !important;
+  color: var(--neon-red) !important;
+  box-shadow: 0 0 20px rgba(243,18,60,0.3) !important;
 }
 
 .active-s2 {
-  background: rgba(255, 145, 0, 0.15);
-  border-color: var(--neon-orange);
-  color: var(--neon-orange);
-  box-shadow: 0 0 20px rgba(255,145,0,0.2);
-}
-.active-s2:hover {
-  background: rgba(255, 145, 0, 0.25) !important;
+  background: rgba(255, 145, 0, 0.18) !important;
+  border-color: var(--neon-orange) !important;
+  color: var(--neon-orange) !important;
+  box-shadow: 0 0 20px rgba(255,145,0,0.3) !important;
 }
 
-/* Timing Table */
+/* Timing Table (F1 FIA Live Timing Style) */
 .timing-table {
   width: 100%;
   border-collapse: collapse;
@@ -201,30 +243,35 @@ button {
 
 .timing-table th {
   background: rgba(255, 255, 255, 0.03);
-  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
-  padding: 16px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.15);
+  padding: 14px 16px;
   text-align: left;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
+  font-weight: 700;
 }
 
 .timing-table td {
-  padding: 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: 14px;
+}
+
+.timing-table tbody tr {
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .timing-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .stat-pill {
   flex: 1;
   min-width: 80px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
@@ -234,14 +281,82 @@ button {
   transform: skewX(-6deg);
 }
 
-/* Pulsating Animation for Sectors */
+/* Sector Best Colors */
+.sector-purple {
+  background: rgba(176, 0, 255, 0.25) !important;
+  color: #d070ff !important;
+  border: 1px solid rgba(176, 0, 255, 0.5);
+  font-weight: 700;
+}
+
+.sector-green {
+  background: rgba(57, 255, 20, 0.2) !important;
+  color: #39ff14 !important;
+  border: 1px solid rgba(57, 255, 20, 0.4);
+  font-weight: 700;
+}
+
+.sector-yellow {
+  background: rgba(255, 238, 0, 0.15) !important;
+  color: #ffe600 !important;
+  border: 1px solid rgba(255, 238, 0, 0.3);
+}
+
+/* F1 Shift Lights Bar */
+.shift-lights-container {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.shift-light {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1a1b24;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.15s ease;
+}
+
+.shift-light.green.active {
+  background: #39ff14;
+  box-shadow: 0 0 12px #39ff14, 0 0 24px #39ff14;
+}
+
+.shift-light.yellow.active {
+  background: #ffee00;
+  box-shadow: 0 0 12px #ffee00, 0 0 24px #ffee00;
+}
+
+.shift-light.red.active {
+  background: #e10600;
+  box-shadow: 0 0 12px #e10600, 0 0 24px #e10600;
+}
+
+.shift-light.blue.active {
+  background: #00f0ff;
+  box-shadow: 0 0 16px #00f0ff, 0 0 32px #00f0ff;
+  animation: flash 0.2s infinite alternate;
+}
+
+@keyframes flash {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
 @keyframes pulse {
   0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.4); opacity: 0.6; }
+  50% { transform: scale(1.3); opacity: 0.6; }
   100% { transform: scale(1); opacity: 1; }
 }
 
-/* Darker map tiles for OLED look */
+/* Dark Map Tiles */
 .map-tiles-dark {
-  filter: brightness(0.4) saturate(1.2) contrast(1.1) hue-rotate(10deg);
+  filter: brightness(0.45) saturate(1.3) contrast(1.15) hue-rotate(15deg);
 }
+
