@@ -46,6 +46,7 @@ export const record = mutation({
 export const clearBoard = mutation({
   args: {
     trackId: v.optional(v.id("tracks")),
+    clearAll: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     let laps;
@@ -54,8 +55,10 @@ export const clearBoard = mutation({
         .query("laps")
         .withIndex("by_trackId", (q) => q.eq("trackId", args.trackId!))
         .collect();
-    } else {
+    } else if (args.clearAll) {
       laps = await ctx.db.query("laps").collect();
+    } else {
+      return;
     }
     for (const lap of laps) {
       await ctx.db.delete(lap._id);

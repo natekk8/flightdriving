@@ -49,10 +49,36 @@ export async function flushLapQueue(
       const nextAttempts = _attempts + 1;
       if (nextAttempts < 5) {
         stillPending.push({ ...item, _attempts: nextAttempts });
+      } else {
+        console.error('Przekroczono limit prób wysłania okrążenia offline', item);
       }
     }
   }
 
-  writeQueue(stillPending);
-  return stillPending.length;
+  const currentStorage = readQueue();
+  const stillPendingMap = new Map(stillPending.map(item => [item._queueId, item]));
+  const originalIds = new Set(queue.map(item => item._queueId));
+
+  const merged: PendingLap[] = [];
+  const seenIds = new Set<string>();
+
+  for (const item of currentStorage) {
+    if (stillPendingMap.has(item._queueId)) {
+      merged.push(stillPendingMap.get(item._queueId)!);
+      seenIds.add(item._queueId);
+    } else if (!originalIds.has(item._queueId)) {
+      merged.push(item);
+      seenIds.add(item._queueId);
+    }
+  }
+
+  for (const item of stillPending) {
+    if (!seenIds.has(item._queueId)) {
+      merged.push(item);
+      seenIds.add(item._queueId);
+    }
+  }
+
+  writeQueue(merged);
+  return merged.length;
 }

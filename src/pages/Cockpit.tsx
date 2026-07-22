@@ -302,7 +302,7 @@ export default function Cockpit() {
             // Re-arm ignore
           } else if (detectedIntersection !== null) {
             lastGateCrossTime = Date.now();
-            const subFraction = (detectedSubIndex + detectedIntersection) / 5;
+            const subFraction = (detectedSubIndex + detectedIntersection) / 6;
             const exactTimestamp = lastTime + subFraction * (rawTime - lastTime);
 
             if (nextGateIndex === 0) {
