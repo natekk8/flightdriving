@@ -42,6 +42,9 @@ export default function Cockpit() {
   const liveGhostDeltaRef = useRef<number | null>(null);
   const gForceRef = useRef(0);
   const leanAngleRef = useRef(0);
+  const smoothLeanRef = useRef(0);
+  const hasMotionEventRef = useRef(false);
+  const lastHeadingRef = useRef(0);
   const [leanAngleDisplay, setLeanAngleDisplay] = useState(0);
   const lapStartTimeRef = useRef<number | null>(null);
   const lapNumberRef = useRef<number>(1);
@@ -187,17 +190,59 @@ export default function Cockpit() {
     }
     
     motionHandlerRef.current = (e: DeviceMotionEvent) => {
-      const x = e.acceleration?.x || 0;
-      const y = e.acceleration?.y || 0;
-      gForceRef.current = Math.sqrt(x*x + y*y) / 9.81;
+      const ag = e.accelerationIncludingGravity;
+      if (ag && (ag.x !== null || ag.y !== null || ag.z !== null)) {
+        hasMotionEventRef.current = true;
+        const agx = ag.x || 0;
+        const agy = ag.y || 0;
+        const agz = ag.z || 0;
+
+        // Calculate G-force
+        const linAcc = e.acceleration;
+        if (linAcc && (linAcc.x !== null || linAcc.y !== null)) {
+          const lx = linAcc.x || 0;
+          const ly = linAcc.y || 0;
+          gForceRef.current = Math.sqrt(lx * lx + ly * ly) / 9.81;
+        } else {
+          const gTotal = Math.sqrt(agx * agx + agy * agy + agz * agz) / 9.81;
+          gForceRef.current = Math.max(0, gTotal - 1.0);
+        }
+
+        // Calculate Lean Angle (Roll) for Portrait Upright / Tilted Phone Mount (Scooter/Bike):
+        // agx is lateral acceleration (-left, +right)
+        // norm = sqrt(agy^2 + agz^2) is vertical norm, making lean angle invariant to forward pitch tilt!
+        const norm = Math.sqrt(agy * agy + agz * agz);
+        if (norm > 0.5) {
+          const rawLean = (Math.atan2(-agx, norm) * 180) / Math.PI;
+          smoothLeanRef.current = smoothLeanRef.current * 0.7 + rawLean * 0.3;
+          const roundedLean = Math.round(smoothLeanRef.current);
+          leanAngleRef.current = roundedLean;
+          setLeanAngleDisplay(roundedLean);
+        }
+      } else {
+        const x = e.acceleration?.x || 0;
+        const y = e.acceleration?.y || 0;
+        gForceRef.current = Math.sqrt(x * x + y * y) / 9.81;
+      }
     };
     window.addEventListener('devicemotion', motionHandlerRef.current);
 
     orientationHandlerRef.current = (e: DeviceOrientationEvent) => {
-      // Roll angle (gamma) or pitch (beta)
-      const roll = e.gamma || 0;
-      leanAngleRef.current = Math.round(roll);
-      setLeanAngleDisplay(Math.round(roll));
+      if (hasMotionEventRef.current) return;
+      const beta = e.beta || 0;
+      const gamma = e.gamma || 0;
+
+      let lean = gamma;
+      if (Math.abs(beta) > 35) {
+        const betaRad = (beta * Math.PI) / 180;
+        const gammaRad = (gamma * Math.PI) / 180;
+        const trueRoll = Math.atan2(Math.sin(gammaRad), Math.cos(betaRad) * Math.cos(gammaRad));
+        lean = (trueRoll * 180) / Math.PI;
+      }
+      smoothLeanRef.current = smoothLeanRef.current * 0.7 + lean * 0.3;
+      const rounded = Math.round(smoothLeanRef.current);
+      leanAngleRef.current = rounded;
+      setLeanAngleDisplay(rounded);
     };
     window.addEventListener('deviceorientation', orientationHandlerRef.current);
 
@@ -290,13 +335,17 @@ export default function Cockpit() {
           leafletMap.current.setView([currentPoint.lat, currentPoint.lon]);
         }
 
+        if (pos.coords.heading !== null && !isNaN(pos.coords.heading) && pos.coords.heading >= 0) {
+          lastHeadingRef.current = pos.coords.heading;
+        }
+
         const now = Date.now();
         if (now - lastTelemetryTime > THROTTLE_MS) {
           lastTelemetryTime = now;
           updateTelemetry({
             driverName, vehicleType, trackId: track._id,
             lat: currentPoint.lat, lon: currentPoint.lon,
-            speed: speedKmh, heading: pos.coords.heading || 0,
+            speed: speedKmh, heading: lastHeadingRef.current,
             gForce: gForceRef.current, timestamp: rawTime,
           }).catch(console.error);
         }
