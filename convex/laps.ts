@@ -53,10 +53,10 @@ export const record = mutation({
       .withIndex("by_trackId_vehicle", (q) =>
         q.eq("trackId", args.trackId).eq("vehicleType", args.vehicleType)
       )
-      .filter((q) => q.eq(q.field("driverName"), args.driverName))
       .collect();
 
-    const chronologicalLapNumber = existing.length + 1;
+    const driverLaps = existing.filter((l) => l.driverName === args.driverName);
+    const chronologicalLapNumber = driverLaps.length + 1;
     const now = Date.now();
 
     return await ctx.db.insert("laps", {

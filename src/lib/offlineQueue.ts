@@ -42,10 +42,18 @@ export async function flushLapQueue(
 
   const stillPending: PendingLap[] = [];
   for (const item of queue) {
-    const { _queueId, _attempts = 0, ...lapArgs } = item;
+    const { _attempts = 0 } = item;
+    const cleanPayload: Record<string, unknown> = {};
+    const allowedKeys = ['driverName', 'vehicleType', 'trackId', 'lapNumber', 's1', 's2', 's3', 'lapTime', 'topSpeed', 'maxLeanAngle', 'maxGForce', 'cornerSpeeds', 'timestamp'];
+    for (const key of allowedKeys) {
+      if (item[key] !== undefined) {
+        cleanPayload[key] = item[key];
+      }
+    }
     try {
-      await recordLap(lapArgs);
-    } catch {
+      await recordLap(cleanPayload);
+    } catch (err) {
+      console.warn('Nie udało się zapisać okrążenia z kolejki offline:', err);
       const nextAttempts = _attempts + 1;
       if (nextAttempts < 5) {
         stillPending.push({ ...item, _attempts: nextAttempts });

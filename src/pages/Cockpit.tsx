@@ -451,14 +451,19 @@ export default function Cockpit() {
                     s2: hasS2 ? (sectorTimes[1] - sectorTimes[0]) : undefined,
                     s3: hasS1 ? (totalTime - (hasS2 ? sectorTimes[1] : sectorTimes[0])) : undefined,
                     topSpeed: maxSpeedRef.current,
-                    maxLeanAngle: currentLapMaxLeanRef.current,
-                    maxGForce: Number(currentLapMaxGRef.current.toFixed(2)),
+                    maxLeanAngle: currentLapMaxLeanRef.current || 0,
+                    maxGForce: Number((currentLapMaxGRef.current || 0).toFixed(2)),
                     timestamp: Date.now()
                   };
-                  recordLap(lapArgs).catch(() => {
-                    const count = queueLap(lapArgs);
-                    setPendingLapCount(count);
-                  });
+                  recordLap(lapArgs)
+                    .then(() => {
+                      flushLapQueue(recordLap).then(setPendingLapCount).catch(console.error);
+                    })
+                    .catch((err) => {
+                      console.warn('Okrążenie zapisane lokalnie w kolejce offline:', err);
+                      const count = queueLap(lapArgs);
+                      setPendingLapCount(count);
+                    });
                 }
 
                 currentLapMaxLeanRef.current = 0;
@@ -495,7 +500,7 @@ export default function Cockpit() {
     );
   };
 
-  const abortRace = () => {
+  const abortRace = async () => {
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
     if (motionHandlerRef.current) window.removeEventListener('devicemotion', motionHandlerRef.current);
     if (orientationHandlerRef.current) window.removeEventListener('deviceorientation', orientationHandlerRef.current);
@@ -505,8 +510,13 @@ export default function Cockpit() {
       clearDriverTelemetry({ driverName }).catch(console.error);
     }
 
-    // Flush any pending completed laps queue
-    flushLapQueue(recordLap).catch(console.error);
+    // Flush any pending completed laps queue before exiting
+    try {
+      const remaining = await flushLapQueue(recordLap);
+      setPendingLapCount(remaining);
+    } catch (err) {
+      console.error('Błąd fluszowania kolejki offline przy wyjściu:', err);
+    }
 
     releaseWakeLock();
     setPhase('setup');
