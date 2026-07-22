@@ -545,33 +545,46 @@ export default function RaceControl() {
         const driverATelem = compareDriverA ? telemetry.find((t: any) => t.driverName === compareDriverA) : null;
         const driverBTelem = compareDriverB ? telemetry.find((t: any) => t.driverName === compareDriverB) : null;
 
-        const maxSpeed = Math.max(
-          driverALap?.topSpeed || 0, driverBLap?.topSpeed || 0,
-          driverATelem?.speed || 0, driverBTelem?.speed || 0, 30
-        );
+        const s1A = driverALap?.s1 ? (450000 / driverALap.s1) * 3 : (driverATelem?.speed || 24);
+        const s2A = driverALap?.s2 ? (450000 / driverALap.s2) * 3 : (driverATelem?.speed || 27);
+        const topA = driverALap?.topSpeed || driverATelem?.speed || 32;
+        const s3A = driverALap?.s3 ? (450000 / driverALap.s3) * 3 : 20;
 
-        const speedToY = (speed: number) => Math.round(115 - (Math.min(speed, maxSpeed) / maxSpeed) * 90);
+        const s1B = driverBLap?.s1 ? (450000 / driverBLap.s1) * 3 : (driverBTelem?.speed || 21);
+        const s2B = driverBLap?.s2 ? (450000 / driverBLap.s2) * 3 : (driverBTelem?.speed || 25);
+        const topB = driverBLap?.topSpeed || driverBTelem?.speed || 30;
+        const s3B = driverBLap?.s3 ? (450000 / driverBLap.s3) * 3 : 18;
+
+        const allSpeeds = [s1A, s2A, topA, s3A, s1B, s2B, topB, s3B];
+        const minSpeedVal = Math.max(0, Math.min(...allSpeeds) - 5);
+        const maxSpeedVal = Math.max(...allSpeeds) + 5;
+        const speedRange = Math.max(8, maxSpeedVal - minSpeedVal);
+
+        const speedToY = (speed: number) => {
+          const clamped = Math.min(Math.max(speed, minSpeedVal), maxSpeedVal);
+          return Math.round(115 - ((clamped - minSpeedVal) / speedRange) * 85);
+        };
 
         // Driver A SVG path calculation
         let pathAData = '';
         if (driverALap || driverATelem) {
-          const y0 = speedToY(15);
-          const y1 = speedToY(driverALap?.s1 ? Math.min(maxSpeed, (450000 / driverALap.s1) * 3) : (driverATelem?.speed || 25));
-          const y2 = speedToY(driverALap?.s2 ? Math.min(maxSpeed, (450000 / driverALap.s2) * 3) : (driverATelem?.speed || 28));
-          const y3 = speedToY(driverALap?.topSpeed || driverATelem?.speed || maxSpeed * 0.9);
-          const y4 = speedToY(driverALap?.s3 ? Math.min(maxSpeed, (450000 / driverALap.s3) * 3) : 20);
-          pathAData = `M 20,${y0} Q 95,${y0 - 5} 170,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+          const y0 = speedToY(s1A * 0.7);
+          const y1 = speedToY(s1A);
+          const y2 = speedToY(s2A);
+          const y3 = speedToY(topA);
+          const y4 = speedToY(s3A);
+          pathAData = `M 20,${y0} Q 95,${y0 - 5} 160,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
         }
 
         // Driver B SVG path calculation
         let pathBData = '';
         if (driverBLap || driverBTelem) {
-          const y0 = speedToY(12);
-          const y1 = speedToY(driverBLap?.s1 ? Math.min(maxSpeed, (450000 / driverBLap.s1) * 3) : (driverBTelem?.speed || 22));
-          const y2 = speedToY(driverBLap?.s2 ? Math.min(maxSpeed, (450000 / driverBLap.s2) * 3) : (driverBTelem?.speed || 26));
-          const y3 = speedToY(driverBLap?.topSpeed || driverBTelem?.speed || maxSpeed * 0.85);
-          const y4 = speedToY(driverBLap?.s3 ? Math.min(maxSpeed, (450000 / driverBLap.s3) * 3) : 18);
-          pathBData = `M 20,${y0} Q 95,${y0 - 5} 170,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+          const y0 = speedToY(s1B * 0.7);
+          const y1 = speedToY(s1B);
+          const y2 = speedToY(s2B);
+          const y3 = speedToY(topB);
+          const y4 = speedToY(s3B);
+          pathBData = `M 20,${y0} Q 95,${y0 - 5} 160,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
         }
 
         const lapTimeDelta = (driverALap?.lapTime && driverBLap?.lapTime)
@@ -610,10 +623,8 @@ export default function RaceControl() {
             {/* SVG Comparative Graph */}
             <div style={{ background: '#050510', borderRadius: '12px', padding: '16px', height: '190px', position: 'relative', border: '1px solid rgba(0,240,255,0.2)', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800 }}>WYKRES PRĘDKOŚCI TELEMETRII (0% ➔ 100% TRASY)</div>
-                {maxSpeed > 0 && (
-                  <div style={{ fontSize: '10px', color: 'var(--neon-cyan)', fontWeight: 800 }}>SKALA V-MAX: {Math.round(maxSpeed)} km/h</div>
-                )}
+                <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800 }}>PROFIL PRĘDKOŚCI & TELEMETRII (0% ➔ 100% TRASY)</div>
+                <div style={{ fontSize: '10px', color: 'var(--neon-cyan)', fontWeight: 800 }}>SKALA PRĘDKOŚCI: {Math.round(minSpeedVal)} - {Math.round(maxSpeedVal)} km/h</div>
               </div>
 
               {(!compareDriverA && !compareDriverB) ? (
@@ -640,30 +651,35 @@ export default function RaceControl() {
                   </defs>
 
                   {/* Grid Lines */}
-                  <line x1="20" y1="25" x2="480" y2="25" stroke="#1f293d" strokeDasharray="4" />
+                  <line x1="20" y1="28" x2="480" y2="28" stroke="#1f293d" strokeDasharray="4" />
                   <line x1="20" y1="70" x2="480" y2="70" stroke="#1f293d" strokeDasharray="4" />
-                  <line x1="20" y1="115" x2="480" y2="115" stroke="#1f293d" strokeDasharray="4" />
+                  <line x1="20" y1="112" x2="480" y2="112" stroke="#1f293d" strokeDasharray="4" />
                   
-                  {/* Sector markers */}
-                  <line x1="170" y1="15" x2="170" y2="115" stroke="rgba(255,255,255,0.12)" strokeDasharray="2" />
-                  <text x="172" y="24" fill="#aaa" fontSize="9" fontWeight="700">SEKTOR 1</text>
-                  <line x1="320" y1="15" x2="320" y2="115" stroke="rgba(255,255,255,0.12)" strokeDasharray="2" />
-                  <text x="322" y="24" fill="#aaa" fontSize="9" fontWeight="700">SEKTOR 2</text>
+                  {/* Sector Divider Lines & Clean Non-Overlapping Pill Badges */}
+                  <line x1="160" y1="22" x2="160" y2="120" stroke="rgba(255,255,255,0.18)" strokeDasharray="3,3" />
+                  <rect x="132" y="5" width="56" height="15" rx="4" fill="#080c18" stroke="rgba(255,255,255,0.15)" />
+                  <text x="160" y="16" fill="#94a3b8" fontSize="8" fontWeight="800" textAnchor="middle">SEKTOR 1</text>
+
+                  <line x1="320" y1="22" x2="320" y2="120" stroke="rgba(255,255,255,0.18)" strokeDasharray="3,3" />
+                  <rect x="292" y="5" width="56" height="15" rx="4" fill="#080c18" stroke="rgba(255,255,255,0.15)" />
+                  <text x="320" y="16" fill="#94a3b8" fontSize="8" fontWeight="800" textAnchor="middle">SEKTOR 2</text>
 
                   {/* Driver A Curve (Lime Green #00ff88) */}
                   {pathAData && (
                     <>
                       <path d={pathAData} fill="none" stroke="var(--neon-green)" strokeWidth="3.5" strokeLinecap="round" filter="url(#glowGreenComp)" vectorEffect="non-scaling-stroke" />
-                      <circle cx="170" cy={speedToY(driverALap?.s1 ? (450000 / driverALap.s1) * 3 : 25)} r="4" fill="var(--neon-green)" />
-                      <circle cx="320" cy={speedToY(driverALap?.s2 ? (450000 / driverALap.s2) * 3 : 28)} r="4" fill="var(--neon-green)" />
+                      <circle cx="160" cy={speedToY(s1A)} r="4.5" fill="var(--neon-green)" />
+                      <circle cx="320" cy={speedToY(s2A)} r="4.5" fill="var(--neon-green)" />
+                      <circle cx="420" cy={speedToY(topA)} r="4.5" fill="var(--neon-green)" />
                     </>
                   )}
                   {/* Driver B Curve (Electric Cyan #00f0ff) */}
                   {pathBData && (
                     <>
                       <path d={pathBData} fill="none" stroke="var(--neon-cyan)" strokeWidth="3.5" strokeLinecap="round" filter="url(#glowCyanComp)" vectorEffect="non-scaling-stroke" />
-                      <circle cx="170" cy={speedToY(driverBLap?.s1 ? (450000 / driverBLap.s1) * 3 : 22)} r="4" fill="var(--neon-cyan)" />
-                      <circle cx="320" cy={speedToY(driverBLap?.s2 ? (450000 / driverBLap.s2) * 3 : 26)} r="4" fill="var(--neon-cyan)" />
+                      <circle cx="160" cy={speedToY(s1B)} r="4.5" fill="var(--neon-cyan)" />
+                      <circle cx="320" cy={speedToY(s2B)} r="4.5" fill="var(--neon-cyan)" />
+                      <circle cx="420" cy={speedToY(topB)} r="4.5" fill="var(--neon-cyan)" />
                     </>
                   )}
                 </svg>
@@ -745,30 +761,44 @@ export default function RaceControl() {
         const currentTrackObj = tracks.find((t: any) => t._id === selectedTrack);
         const trackCorners = currentTrackObj?.path ? calculateTrackCorners(currentTrackObj.path) : [];
 
-        const maxSpeed = Math.max(
-          lapA?.topSpeed || 0, lapB?.topSpeed || 0, 30
-        );
+        const s1A = lapA?.s1 ? (450000 / lapA.s1) * 3 : 25;
+        const s2A = lapA?.s2 ? (450000 / lapA.s2) * 3 : 28;
+        const topA = lapA?.topSpeed || 34;
+        const s3A = lapA?.s3 ? (450000 / lapA.s3) * 3 : 22;
 
-        const speedToY = (speed: number) => Math.round(115 - (Math.min(speed, maxSpeed) / maxSpeed) * 90);
+        const s1B = lapB?.s1 ? (450000 / lapB.s1) * 3 : 28;
+        const s2B = lapB?.s2 ? (450000 / lapB.s2) * 3 : 31;
+        const topB = lapB?.topSpeed || 37;
+        const s3B = lapB?.s3 ? (450000 / lapB.s3) * 3 : 25;
+
+        const allSpeeds = [s1A, s2A, topA, s3A, s1B, s2B, topB, s3B];
+        const minSpeedVal = Math.max(0, Math.min(...allSpeeds) - 5);
+        const maxSpeedVal = Math.max(...allSpeeds) + 5;
+        const speedRange = Math.max(8, maxSpeedVal - minSpeedVal);
+
+        const speedToY = (speed: number) => {
+          const clamped = Math.min(Math.max(speed, minSpeedVal), maxSpeedVal);
+          return Math.round(115 - ((clamped - minSpeedVal) / speedRange) * 85);
+        };
 
         let pathAData = '';
         if (lapA) {
-          const y0 = speedToY(15);
-          const y1 = speedToY(lapA.s1 ? Math.min(maxSpeed, (450000 / lapA.s1) * 3) : 25);
-          const y2 = speedToY(lapA.s2 ? Math.min(maxSpeed, (450000 / lapA.s2) * 3) : 28);
-          const y3 = speedToY(lapA.topSpeed || maxSpeed * 0.9);
-          const y4 = speedToY(lapA.s3 ? Math.min(maxSpeed, (450000 / lapA.s3) * 3) : 20);
-          pathAData = `M 20,${y0} Q 95,${y0 - 5} 170,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+          const y0 = speedToY(s1A * 0.7);
+          const y1 = speedToY(s1A);
+          const y2 = speedToY(s2A);
+          const y3 = speedToY(topA);
+          const y4 = speedToY(s3A);
+          pathAData = `M 20,${y0} Q 95,${y0 - 5} 160,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
         }
 
         let pathBData = '';
         if (lapB) {
-          const y0 = speedToY(14);
-          const y1 = speedToY(lapB.s1 ? Math.min(maxSpeed, (450000 / lapB.s1) * 3) : 27);
-          const y2 = speedToY(lapB.s2 ? Math.min(maxSpeed, (450000 / lapB.s2) * 3) : 30);
-          const y3 = speedToY(lapB.topSpeed || maxSpeed * 0.95);
-          const y4 = speedToY(lapB.s3 ? Math.min(maxSpeed, (450000 / lapB.s3) * 3) : 22);
-          pathBData = `M 20,${y0} Q 95,${y0 - 5} 170,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+          const y0 = speedToY(s1B * 0.7);
+          const y1 = speedToY(s1B);
+          const y2 = speedToY(s2B);
+          const y3 = speedToY(topB);
+          const y4 = speedToY(s3B);
+          pathBData = `M 20,${y0} Q 95,${y0 - 5} 160,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
         }
 
         const deltaLap = lapA && lapB ? (lapB.lapTime - lapA.lapTime) / 1000 : null;
@@ -955,21 +985,27 @@ export default function RaceControl() {
                     </defs>
 
                     {/* Horizontal Grid */}
-                    <line x1="20" y1="25" x2="480" y2="25" stroke="#1c2438" strokeDasharray="4" />
+                    <line x1="20" y1="28" x2="480" y2="28" stroke="#1c2438" strokeDasharray="4" />
                     <line x1="20" y1="70" x2="480" y2="70" stroke="#1c2438" strokeDasharray="4" />
-                    <line x1="20" y1="115" x2="480" y2="115" stroke="#1c2438" strokeDasharray="4" />
+                    <line x1="20" y1="112" x2="480" y2="112" stroke="#1c2438" strokeDasharray="4" />
 
-                    {/* Sector Lines */}
-                    <line x1="170" y1="15" x2="170" y2="115" stroke="rgba(255,255,255,0.15)" strokeDasharray="2" />
-                    <text x="172" y="24" fill="#aaa" fontSize="9" fontWeight="700">SEKTOR 1</text>
-                    <line x1="320" y1="15" x2="320" y2="115" stroke="rgba(255,255,255,0.15)" strokeDasharray="2" />
-                    <text x="322" y="24" fill="#aaa" fontSize="9" fontWeight="700">SEKTOR 2</text>
+                    {/* Sector Divider Lines & Clean Non-Overlapping Pill Badges */}
+                    <line x1="160" y1="22" x2="160" y2="120" stroke="rgba(255,255,255,0.18)" strokeDasharray="3,3" />
+                    <rect x="132" y="5" width="56" height="15" rx="4" fill="#080c18" stroke="rgba(255,255,255,0.15)" />
+                    <text x="160" y="16" fill="#94a3b8" fontSize="8" fontWeight="800" textAnchor="middle">SEKTOR 1</text>
+
+                    <line x1="320" y1="22" x2="320" y2="120" stroke="rgba(255,255,255,0.18)" strokeDasharray="3,3" />
+                    <rect x="292" y="5" width="56" height="15" rx="4" fill="#080c18" stroke="rgba(255,255,255,0.15)" />
+                    <text x="320" y="16" fill="#94a3b8" fontSize="8" fontWeight="800" textAnchor="middle">SEKTOR 2</text>
 
                     {/* Curve A Fill & Stroke (Gold) */}
                     {pathAData && (
                       <>
                         <path d={`${pathAData} L 480,115 L 20,115 Z`} fill="url(#gradGold)" />
                         <path d={pathAData} fill="none" stroke="#ffb703" strokeWidth="2.5" strokeLinecap="round" filter="url(#glowGoldTrain)" vectorEffect="non-scaling-stroke" />
+                        <circle cx="160" cy={speedToY(s1A)} r="4.5" fill="#ffb703" />
+                        <circle cx="320" cy={speedToY(s2A)} r="4.5" fill="#ffb703" />
+                        <circle cx="420" cy={speedToY(topA)} r="4.5" fill="#ffb703" />
                       </>
                     )}
 
@@ -980,8 +1016,9 @@ export default function RaceControl() {
                         <path d={pathBData} fill="none" stroke="#00f0ff" strokeWidth="3.5" strokeLinecap="round" filter="url(#glowCyanTrain)" vectorEffect="non-scaling-stroke" />
                         
                         {/* Glowing Data Nodes for B */}
-                        <circle cx="170" cy={speedToY(lapB.s1 ? (450000 / lapB.s1) * 3 : 27)} r="5" fill="#00f0ff" filter="url(#glowCyanTrain)" />
-                        <circle cx="320" cy={speedToY(lapB.s2 ? (450000 / lapB.s2) * 3 : 30)} r="5" fill="#00f0ff" filter="url(#glowCyanTrain)" />
+                        <circle cx="160" cy={speedToY(s1B)} r="5" fill="#00f0ff" filter="url(#glowCyanTrain)" />
+                        <circle cx="320" cy={speedToY(s2B)} r="5" fill="#00f0ff" filter="url(#glowCyanTrain)" />
+                        <circle cx="420" cy={speedToY(topB)} r="5" fill="#00f0ff" filter="url(#glowCyanTrain)" />
                       </>
                     )}
 
