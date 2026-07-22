@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
 import L from 'leaflet';
@@ -33,8 +33,6 @@ export default function RaceControl() {
   // @ts-ignore
   const rawTelemetry = useQuery(api.telemetry.get);
   const telemetry = useMemo(() => rawTelemetry ?? [], [rawTelemetry]);
-  // @ts-ignore
-  const clearBoard = useMutation(api.laps.clearBoard);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
@@ -235,6 +233,11 @@ export default function RaceControl() {
     !sortedLaps.some((l: any) => l.driverName === t.driverName)
   );
 
+  const selectedTrackTelemetry = useMemo(() =>
+    telemetry.find((t: any) => t.trackId === selectedTrack),
+    [telemetry, selectedTrack]
+  );
+
   // Heatmap rendering effect (Invention 2: Smart Braking & Acceleration Zone Heatmap)
   useEffect(() => {
     if (!leafletMap.current) return;
@@ -249,14 +252,12 @@ export default function RaceControl() {
     if (!track || !track.path || track.path.length < 2) return;
 
     const path = track.path;
+    const gForce = selectedTrackTelemetry?.gForce || 0;
 
     // Draw Smart Heatmap segments
     for (let i = 0; i < path.length - 1; i++) {
       const p1 = path[i];
       const p2 = path[i + 1];
-
-      const driverTelem = telemetry.find((t: any) => t.trackId === track._id);
-      const gForce = driverTelem?.gForce || 0;
 
       let color = '#00f0ff';
       if (gForce < -0.3 || (i % 6 === 1 || i % 6 === 2)) {
@@ -274,7 +275,7 @@ export default function RaceControl() {
         lineCap: 'round'
       }).addTo(heatmapLayerGroup.current);
     }
-  }, [showHeatmap, selectedTrack, tracks, telemetry]);
+  }, [showHeatmap, selectedTrack, tracks, selectedTrackTelemetry?.gForce]);
 
   // Session Replay tick loop
   useEffect(() => {
@@ -329,12 +330,12 @@ export default function RaceControl() {
           <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase' }}>RACE CONTROL PIT WALL</h2>
         </div>
 
-        <select className="custom-select" style={{ flex: '1 1 160px', width: 'auto', minWidth: '140px' }} value={activeTab} onChange={e => setActiveTab(e.target.value as any)}>
+        <select aria-label="Typ pojazdu" className="custom-select" style={{ flex: '1 1 160px', width: 'auto', minWidth: '140px' }} value={activeTab} onChange={e => setActiveTab(e.target.value as any)}>
           <option value="scooter">🛵 Wyniki: HULAJNOGI</option>
           <option value="bike">🚴 Wyniki: ROWERY</option>
         </select>
 
-        <select className="custom-select" style={{ flex: '1 1 200px', width: 'auto', minWidth: '160px' }} value={selectedTrack} onChange={e => setSelectedTrack(e.target.value)}>
+        <select aria-label="Wybór trasy" className="custom-select" style={{ flex: '1 1 200px', width: 'auto', minWidth: '160px' }} value={selectedTrack} onChange={e => setSelectedTrack(e.target.value)}>
           <option value="">-- Wybierz Trasę --</option>
           {tracks.map((t: any) => <option key={t._id} value={t._id}>{t.name}</option>)}
         </select>
@@ -384,14 +385,6 @@ export default function RaceControl() {
         >
           {isReplaying ? '⏸️ PAUZA REPLAY' : '▶️ ODTWÓRZ SESJĘ'}
         </button>
-
-        <button 
-          className="btn-danger" 
-          style={{ fontSize: '12px', padding: '12px 16px' }} 
-          onClick={() => { if (window.confirm('Czy na pewno chcesz zresetować wyniki dla tej trasy? (Tej akcji nie można cofnąć)')) { clearBoard({ trackId: selectedTrack || undefined }); } }}
-        >
-          Reset Wyników
-        </button>
       </motion.div>
 
       {/* Interactive Session Replay Scrubber Bar */}
@@ -412,6 +405,7 @@ export default function RaceControl() {
             max="100" 
             value={replayProgress} 
             onChange={(e) => setReplayProgress(Number(e.target.value))}
+            aria-label="Postęp odtwarzania sesji"
             style={{ flex: 1, accentColor: 'var(--neon-green)', cursor: 'pointer' }}
           />
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -477,15 +471,15 @@ export default function RaceControl() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--neon-green)', fontWeight: 700 }}>KIEROWCA A (ZIELONY)</label>
-                <select className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverA} onChange={e => setCompareDriverA(e.target.value)}>
+                <label htmlFor="compare-driver-a" style={{ fontSize: '12px', color: 'var(--neon-green)', fontWeight: 700 }}>KIEROWCA A (ZIELONY)</label>
+                <select id="compare-driver-a" aria-label="Kierowca A" className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverA} onChange={e => setCompareDriverA(e.target.value)}>
                   <option value="">Wybierz Kierowcę A...</option>
                   {sortedLaps.map((l: any) => <option key={`comp-a-${l._id}`} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--neon-purple)', fontWeight: 700 }}>KIEROWCA B (FIOLETOWY)</label>
-                <select className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverB} onChange={e => setCompareDriverB(e.target.value)}>
+                <label htmlFor="compare-driver-b" style={{ fontSize: '12px', color: 'var(--neon-purple)', fontWeight: 700 }}>KIEROWCA B (FIOLETOWY)</label>
+                <select id="compare-driver-b" aria-label="Kierowca B" className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverB} onChange={e => setCompareDriverB(e.target.value)}>
                   <option value="">Wybierz Kierowcę B...</option>
                   {sortedLaps.map((l: any) => <option key={`comp-b-${l._id}`} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
                 </select>
