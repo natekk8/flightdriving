@@ -18,6 +18,15 @@ export default defineSchema({
     s3: v.optional(v.number()),
     lapTime: v.number(),
     topSpeed: v.optional(v.number()),
+    maxLeanAngle: v.optional(v.number()),
+    maxGForce: v.optional(v.number()),
+    cornerSpeeds: v.optional(v.array(v.object({
+      cornerIndex: v.number(),
+      entrySpeed: v.number(),
+      apexSpeed: v.number(),
+      exitSpeed: v.number(),
+      leanAngle: v.number()
+    }))),
     timestamp: v.optional(v.number()),
   })
     .index("by_trackId_vehicle", ["trackId", "vehicleType"])

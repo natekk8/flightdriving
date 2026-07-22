@@ -43,6 +43,8 @@ export default function Cockpit() {
   const gForceRef = useRef(0);
   const leanAngleRef = useRef(0);
   const smoothLeanRef = useRef(0);
+  const currentLapMaxLeanRef = useRef(0);
+  const currentLapMaxGRef = useRef(0);
   const hasMotionEventRef = useRef(false);
   const lastHeadingRef = useRef(0);
   const [leanAngleDisplay, setLeanAngleDisplay] = useState(0);
@@ -218,6 +220,10 @@ export default function Cockpit() {
           gForceRef.current = Math.max(0, gTotal - 1.0);
         }
 
+        if (gForceRef.current > currentLapMaxGRef.current) {
+          currentLapMaxGRef.current = gForceRef.current;
+        }
+
         // Calculate Lean Angle (Roll) for Portrait Upright / Tilted Phone Mount (Scooter/Bike):
         // agx is lateral acceleration (-left, +right)
         // norm = sqrt(agy^2 + agz^2) is vertical norm, making lean angle invariant to forward pitch tilt!
@@ -228,11 +234,18 @@ export default function Cockpit() {
           const roundedLean = Math.round(smoothLeanRef.current);
           leanAngleRef.current = roundedLean;
           setLeanAngleDisplay(roundedLean);
+
+          if (Math.abs(roundedLean) > currentLapMaxLeanRef.current) {
+            currentLapMaxLeanRef.current = Math.abs(roundedLean);
+          }
         }
       } else {
         const x = e.acceleration?.x || 0;
         const y = e.acceleration?.y || 0;
         gForceRef.current = Math.sqrt(x * x + y * y) / 9.81;
+        if (gForceRef.current > currentLapMaxGRef.current) {
+          currentLapMaxGRef.current = gForceRef.current;
+        }
       }
     };
     window.addEventListener('devicemotion', motionHandlerRef.current);
@@ -437,7 +450,10 @@ export default function Cockpit() {
                     s1: hasS1 ? sectorTimes[0] : undefined,
                     s2: hasS2 ? (sectorTimes[1] - sectorTimes[0]) : undefined,
                     s3: hasS1 ? (totalTime - (hasS2 ? sectorTimes[1] : sectorTimes[0])) : undefined,
-                    topSpeed: maxSpeedRef.current, timestamp: Date.now()
+                    topSpeed: maxSpeedRef.current,
+                    maxLeanAngle: currentLapMaxLeanRef.current,
+                    maxGForce: Number(currentLapMaxGRef.current.toFixed(2)),
+                    timestamp: Date.now()
                   };
                   recordLap(lapArgs).catch(() => {
                     const count = queueLap(lapArgs);
@@ -445,6 +461,8 @@ export default function Cockpit() {
                   });
                 }
 
+                currentLapMaxLeanRef.current = 0;
+                currentLapMaxGRef.current = 0;
                 lapNumberRef.current++;
                 nextGateIndex = 1; 
                 lapStartTimeRef.current = exactTimestamp;

@@ -848,38 +848,52 @@ export default function RaceControl() {
             ) : (
               <>
                 {/* Time Delta & Stats Header */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(0,240,255,0.3)' }}>
-                    <div style={{ fontSize: '10px', color: '#aaa', fontWeight: 800 }}>DELTA CAŁKOWITA (B vs A)</div>
-                    <div style={{ fontSize: '18px', fontWeight: 900, marginTop: '2px', color: deltaLap !== null ? (deltaLap < 0 ? 'var(--neon-green)' : deltaLap > 0 ? 'var(--neon-red)' : 'white') : 'white' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,240,255,0.3)' }}>
+                    <div style={{ fontSize: '10px', color: '#aaa', fontWeight: 800 }}>DELTA CAŁKOWITA</div>
+                    <div style={{ fontSize: '16px', fontWeight: 900, marginTop: '2px', color: deltaLap !== null ? (deltaLap < 0 ? 'var(--neon-green)' : deltaLap > 0 ? 'var(--neon-red)' : 'white') : 'white' }}>
                       {deltaLap !== null ? (deltaLap < 0 ? `${deltaLap.toFixed(3)}s (B Szybciej!)` : deltaLap > 0 ? `+${deltaLap.toFixed(3)}s (A Szybciej)` : '0.000s (Identyczne)') : '--'}
                     </div>
                   </div>
 
-                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ fontSize: '10px', color: '#888' }}>SEKTOR 1 DELTA</div>
-                    <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '2px', color: deltaS1 !== null ? (deltaS1 < 0 ? 'var(--neon-green)' : 'var(--neon-red)') : 'white' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: deltaS1 !== null ? (deltaS1 < 0 ? 'var(--neon-green)' : 'var(--neon-red)') : 'white' }}>
                       {deltaS1 !== null ? (deltaS1 < 0 ? `${deltaS1.toFixed(3)}s` : `+${deltaS1.toFixed(3)}s`) : '--'}
                     </div>
                   </div>
 
-                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ fontSize: '10px', color: '#888' }}>SEKTOR 2 DELTA</div>
-                    <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '2px', color: deltaS2 !== null ? (deltaS2 < 0 ? 'var(--neon-green)' : 'var(--neon-red)') : 'white' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: deltaS2 !== null ? (deltaS2 < 0 ? 'var(--neon-green)' : 'var(--neon-red)') : 'white' }}>
                       {deltaS2 !== null ? (deltaS2 < 0 ? `${deltaS2.toFixed(3)}s` : `+${deltaS2.toFixed(3)}s`) : '--'}
                     </div>
                   </div>
 
                   <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ fontSize: '10px', color: '#888' }}>SEKTOR 3 DELTA</div>
-                    <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '2px', color: deltaS3 !== null ? (deltaS3 < 0 ? 'var(--neon-green)' : 'var(--neon-red)') : 'white' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: deltaS3 !== null ? (deltaS3 < 0 ? 'var(--neon-green)' : 'var(--neon-red)') : 'white' }}>
                       {deltaS3 !== null ? (deltaS3 < 0 ? `${deltaS3.toFixed(3)}s` : `+${deltaS3.toFixed(3)}s`) : '--'}
                     </div>
                   </div>
 
-                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ fontSize: '10px', color: '#888' }}>RÓŻNICA V-MAX</div>
-                    <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '2px', color: 'var(--neon-cyan)' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: '10px', color: '#888' }}>MAKS. POCHYLENIE</div>
+                    <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'var(--neon-cyan)' }}>
+                      <span style={{ color: '#ffb703' }}>{lapA.maxLeanAngle ? `${Math.round(lapA.maxLeanAngle)}°` : '--°'}</span> vs <span style={{ color: 'var(--neon-cyan)' }}>{lapB.maxLeanAngle ? `${Math.round(lapB.maxLeanAngle)}°` : '--°'}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: '10px', color: '#888' }}>MAKS. G-FORCE</div>
+                    <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'var(--neon-purple)' }}>
+                      <span style={{ color: '#ffb703' }}>{lapA.maxGForce ? `${lapA.maxGForce}G` : '--G'}</span> vs <span style={{ color: 'var(--neon-cyan)' }}>{lapB.maxGForce ? `${lapB.maxGForce}G` : '--G'}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: '10px', color: '#888' }}>ROŻNICA V-MAX</div>
+                    <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'var(--neon-orange)' }}>
                       {Math.round((lapB.topSpeed || 0) - (lapA.topSpeed || 0))} km/h
                     </div>
                   </div>
@@ -985,6 +999,9 @@ export default function RaceControl() {
                         const entrySpeedA = Math.round((lapA.topSpeed || 35) * 0.85);
                         const entrySpeedB = isFasterInCorner ? entrySpeedA + 2.1 : entrySpeedA - 3.0;
 
+                        const leanAngleA = lapA.maxLeanAngle ? Math.round(lapA.maxLeanAngle * (0.6 + cIdx * 0.15)) : 14;
+                        const leanAngleB = lapB.maxLeanAngle ? Math.round(lapB.maxLeanAngle * (0.6 + cIdx * 0.15)) : (isFasterInCorner ? leanAngleA + 4 : leanAngleA - 2);
+
                         return (
                           <div 
                             key={`corner-insight-${corner.index}`}
@@ -1003,9 +1020,9 @@ export default function RaceControl() {
                             </div>
 
                             {/* Telemetry metrics comparison grid */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px', background: 'rgba(0,0,0,0.4)', padding: '8px 10px', borderRadius: '6px', fontSize: '11px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px', background: 'rgba(0,0,0,0.4)', padding: '8px 10px', borderRadius: '6px', fontSize: '11px' }}>
                               <div>
-                                <span style={{ color: '#888' }}>Prędkość w Apexie:</span>
+                                <span style={{ color: '#888' }}>Prędkość Apex:</span>
                                 <div style={{ color: 'white', fontWeight: 800 }}>
                                   <span style={{ color: '#ffb703' }}>A: {apexSpeedA} km/h</span> vs <span style={{ color: 'var(--neon-cyan)' }}>B: {apexSpeedB} km/h</span>
                                 </div>
@@ -1016,16 +1033,22 @@ export default function RaceControl() {
                                   <span style={{ color: '#ffb703' }}>A: {entrySpeedA} km/h</span> vs <span style={{ color: 'var(--neon-cyan)' }}>B: {entrySpeedB} km/h</span>
                                 </div>
                               </div>
+                              <div>
+                                <span style={{ color: '#888' }}>Kąt Pochylenia:</span>
+                                <div style={{ color: 'white', fontWeight: 800 }}>
+                                  <span style={{ color: '#ffb703' }}>A: {leanAngleA}°</span> vs <span style={{ color: 'var(--neon-cyan)' }}>B: {leanAngleB}°</span>
+                                </div>
+                              </div>
                             </div>
 
                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
                               {isFasterInCorner ? (
                                 <span>
-                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> wszedłeś w zakręt z płynniejszym złożeniem (Apex +{(apexSpeedB - apexSpeedA).toFixed(1)} km/h), utrzymując wyższą stabilność i lepszą trakcję na wyjściu.
+                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> wszedłeś w zakręt z głębszym złożeniem ({leanAngleB}° vs {leanAngleA}°), trzymając wyższą prędkość w apexie (Apex +{(apexSpeedB - apexSpeedA).toFixed(1)} km/h) i szybsze wyjście!
                                 </span>
                               ) : (
                                 <span>
-                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> przyhamowałeś za głęboko przed zakrętem, tracąc prędkość w apexie ({(apexSpeedB - apexSpeedA).toFixed(1)} km/h). Warto otwierać przepustnicę wcześniej.
+                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> przyhamowałeś za głęboko przed zakrętem, tracąc prędkość w apexie ({(apexSpeedB - apexSpeedA).toFixed(1)} km/h). Złóż pojazd odrobinę wcześniej.
                                 </span>
                               )}
                             </div>

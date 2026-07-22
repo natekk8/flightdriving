@@ -36,6 +36,15 @@ export const record = mutation({
     s3: v.optional(v.number()),
     lapTime: v.number(),
     topSpeed: v.optional(v.number()),
+    maxLeanAngle: v.optional(v.number()),
+    maxGForce: v.optional(v.number()),
+    cornerSpeeds: v.optional(v.array(v.object({
+      cornerIndex: v.number(),
+      entrySpeed: v.number(),
+      apexSpeed: v.number(),
+      exitSpeed: v.number(),
+      leanAngle: v.number()
+    }))),
     timestamp: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -60,6 +69,9 @@ export const record = mutation({
       s3: args.s3,
       lapTime: args.lapTime,
       topSpeed: args.topSpeed,
+      maxLeanAngle: args.maxLeanAngle,
+      maxGForce: args.maxGForce,
+      cornerSpeeds: args.cornerSpeeds,
       timestamp: args.timestamp || now,
     });
   },
