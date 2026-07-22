@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
 import L from 'leaflet';
@@ -33,8 +33,6 @@ export default function RaceControl() {
   // @ts-ignore
   const rawTelemetry = useQuery(api.telemetry.get);
   const telemetry = useMemo(() => rawTelemetry ?? [], [rawTelemetry]);
-  // @ts-ignore
-  const clearBoard = useMutation(api.laps.clearBoard);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
@@ -386,19 +384,6 @@ export default function RaceControl() {
           onClick={() => setIsReplaying(!isReplaying)}
         >
           {isReplaying ? '⏸️ PAUZA REPLAY' : '▶️ ODTWÓRZ SESJĘ'}
-        </button>
-
-        <button 
-          className="btn-danger" 
-          style={{ fontSize: '12px', padding: '12px 16px' }} 
-          onClick={() => {
-            if (!selectedTrack) return;
-            if (window.confirm('Czy na pewno chcesz zresetować wyniki dla tej trasy? (Tej akcji nie można cofnąć)')) {
-              clearBoard({ trackId: selectedTrack });
-            }
-          }}
-        >
-          Reset Wyników
         </button>
       </motion.div>
 
