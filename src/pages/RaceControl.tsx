@@ -7,6 +7,22 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 import { calculateTrackCorners } from '../lib/math';
 
+function buildMonotonicSpline(pts: { x: number; y: number }[]) {
+  if (pts.length < 2) return '';
+  let path = `M ${pts[0].x},${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i];
+    const p1 = pts[i + 1];
+    const dx = p1.x - p0.x;
+    const cp1x = p0.x + dx * 0.45;
+    const cp1y = p0.y;
+    const cp2x = p0.x + dx * 0.55;
+    const cp2y = p1.y;
+    path += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p1.x},${p1.y}`;
+  }
+  return path;
+}
+
 export default function RaceControl() {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'scooter' | 'bike'>('scooter');
@@ -568,23 +584,27 @@ export default function RaceControl() {
         // Driver A SVG path calculation
         let pathAData = '';
         if (driverALap || driverATelem) {
-          const y0 = speedToY(s1A * 0.7);
-          const y1 = speedToY(s1A);
-          const y2 = speedToY(s2A);
-          const y3 = speedToY(topA);
-          const y4 = speedToY(s3A);
-          pathAData = `M 20,${y0} Q 95,${y0 - 5} 160,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+          const ptsA = [
+            { x: 20, y: speedToY(s1A * 0.7) },
+            { x: 160, y: speedToY(s1A) },
+            { x: 320, y: speedToY(s2A) },
+            { x: 420, y: speedToY(topA) },
+            { x: 480, y: speedToY(s3A) }
+          ];
+          pathAData = buildMonotonicSpline(ptsA);
         }
 
         // Driver B SVG path calculation
         let pathBData = '';
         if (driverBLap || driverBTelem) {
-          const y0 = speedToY(s1B * 0.7);
-          const y1 = speedToY(s1B);
-          const y2 = speedToY(s2B);
-          const y3 = speedToY(topB);
-          const y4 = speedToY(s3B);
-          pathBData = `M 20,${y0} Q 95,${y0 - 5} 160,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+          const ptsB = [
+            { x: 20, y: speedToY(s1B * 0.7) },
+            { x: 160, y: speedToY(s1B) },
+            { x: 320, y: speedToY(s2B) },
+            { x: 420, y: speedToY(topB) },
+            { x: 480, y: speedToY(s3B) }
+          ];
+          pathBData = buildMonotonicSpline(ptsB);
         }
 
         const lapTimeDelta = (driverALap?.lapTime && driverBLap?.lapTime)
@@ -620,11 +640,19 @@ export default function RaceControl() {
               </div>
             </div>
 
-            {/* SVG Comparative Graph */}
+            {/* SVG Comparative Graph Container */}
             <div style={{ background: '#050510', borderRadius: '12px', padding: '16px', height: '190px', position: 'relative', border: '1px solid rgba(0,240,255,0.2)', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800 }}>PROFIL PRĘDKOŚCI & TELEMETRII (0% ➔ 100% TRASY)</div>
                 <div style={{ fontSize: '10px', color: 'var(--neon-cyan)', fontWeight: 800 }}>SKALA PRĘDKOŚCI: {Math.round(minSpeedVal)} - {Math.round(maxSpeedVal)} km/h</div>
+              </div>
+
+              {/* Crisp HTML Sector Badges Overlay (Does NOT distort or overlap) */}
+              <div style={{ position: 'absolute', left: '32%', top: '38px', transform: 'translateX(-50%)', background: '#080c18', border: '1px solid rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 800, color: '#94a3b8', zIndex: 10, pointerEvents: 'none' }}>
+                SEKTOR 1
+              </div>
+              <div style={{ position: 'absolute', left: '64%', top: '38px', transform: 'translateX(-50%)', background: '#080c18', border: '1px solid rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 800, color: '#94a3b8', zIndex: 10, pointerEvents: 'none' }}>
+                SEKTOR 2
               </div>
 
               {(!compareDriverA && !compareDriverB) ? (
@@ -632,7 +660,7 @@ export default function RaceControl() {
                   <span>⚠️ Wybierz co najmniej jednego kierowcę z rozwijanego menu powyżej, aby wygenerować i porównać ich wykresy telemetrii.</span>
                 </div>
               ) : (
-                <svg width="100%" height="130" viewBox="0 0 500 130" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                <svg width="100%" height="130" viewBox="0 0 500 130" style={{ overflow: 'visible' }}>
                   <defs>
                     <filter id="glowGreenComp" x="-20%" y="-20%" width="140%" height="140%">
                       <feGaussianBlur stdDeviation="2.5" result="blur" />
@@ -655,14 +683,9 @@ export default function RaceControl() {
                   <line x1="20" y1="70" x2="480" y2="70" stroke="#1f293d" strokeDasharray="4" />
                   <line x1="20" y1="112" x2="480" y2="112" stroke="#1f293d" strokeDasharray="4" />
                   
-                  {/* Sector Divider Lines & Clean Non-Overlapping Pill Badges */}
+                  {/* Sector Vertical Dashed Lines */}
                   <line x1="160" y1="22" x2="160" y2="120" stroke="rgba(255,255,255,0.18)" strokeDasharray="3,3" />
-                  <rect x="132" y="5" width="56" height="15" rx="4" fill="#080c18" stroke="rgba(255,255,255,0.15)" />
-                  <text x="160" y="16" fill="#94a3b8" fontSize="8" fontWeight="800" textAnchor="middle">SEKTOR 1</text>
-
                   <line x1="320" y1="22" x2="320" y2="120" stroke="rgba(255,255,255,0.18)" strokeDasharray="3,3" />
-                  <rect x="292" y="5" width="56" height="15" rx="4" fill="#080c18" stroke="rgba(255,255,255,0.15)" />
-                  <text x="320" y="16" fill="#94a3b8" fontSize="8" fontWeight="800" textAnchor="middle">SEKTOR 2</text>
 
                   {/* Driver A Curve (Lime Green #00ff88) */}
                   {pathAData && (
@@ -783,22 +806,26 @@ export default function RaceControl() {
 
         let pathAData = '';
         if (lapA) {
-          const y0 = speedToY(s1A * 0.7);
-          const y1 = speedToY(s1A);
-          const y2 = speedToY(s2A);
-          const y3 = speedToY(topA);
-          const y4 = speedToY(s3A);
-          pathAData = `M 20,${y0} Q 95,${y0 - 5} 160,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+          const ptsA = [
+            { x: 20, y: speedToY(s1A * 0.7) },
+            { x: 160, y: speedToY(s1A) },
+            { x: 320, y: speedToY(s2A) },
+            { x: 420, y: speedToY(topA) },
+            { x: 480, y: speedToY(s3A) }
+          ];
+          pathAData = buildMonotonicSpline(ptsA);
         }
 
         let pathBData = '';
         if (lapB) {
-          const y0 = speedToY(s1B * 0.7);
-          const y1 = speedToY(s1B);
-          const y2 = speedToY(s2B);
-          const y3 = speedToY(topB);
-          const y4 = speedToY(s3B);
-          pathBData = `M 20,${y0} Q 95,${y0 - 5} 160,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+          const ptsB = [
+            { x: 20, y: speedToY(s1B * 0.7) },
+            { x: 160, y: speedToY(s1B) },
+            { x: 320, y: speedToY(s2B) },
+            { x: 420, y: speedToY(topB) },
+            { x: 480, y: speedToY(s3B) }
+          ];
+          pathBData = buildMonotonicSpline(ptsB);
         }
 
         const deltaLap = lapA && lapB ? (lapB.lapTime - lapA.lapTime) / 1000 : null;
@@ -947,7 +974,7 @@ export default function RaceControl() {
                   </div>
                 </div>
 
-                {/* SVG Speed & Delta Overlay Graph */}
+                {/* SVG Speed & Delta Overlay Graph Container */}
                 <div style={{ background: '#04060f', borderRadius: '12px', padding: '16px', height: '220px', position: 'relative', border: '1px solid rgba(0, 240, 255, 0.3)', overflow: 'hidden', marginBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800 }}>PROFIL PRĘDKOŚCI & TELEMETRII (0% ➔ 100% TRASY)</div>
@@ -957,7 +984,15 @@ export default function RaceControl() {
                     </div>
                   </div>
 
-                  <svg width="100%" height="160" viewBox="0 0 500 160" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                  {/* Crisp HTML Sector Badges Overlay (Does NOT distort or overlap) */}
+                  <div style={{ position: 'absolute', left: '32%', top: '38px', transform: 'translateX(-50%)', background: '#080c18', border: '1px solid rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 800, color: '#94a3b8', zIndex: 10, pointerEvents: 'none' }}>
+                    SEKTOR 1
+                  </div>
+                  <div style={{ position: 'absolute', left: '64%', top: '38px', transform: 'translateX(-50%)', background: '#080c18', border: '1px solid rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 800, color: '#94a3b8', zIndex: 10, pointerEvents: 'none' }}>
+                    SEKTOR 2
+                  </div>
+
+                  <svg width="100%" height="160" viewBox="0 0 500 160" style={{ overflow: 'visible' }}>
                     <defs>
                       <filter id="glowGoldTrain" x="-20%" y="-20%" width="140%" height="140%">
                         <feGaussianBlur stdDeviation="2" result="blur" />
@@ -989,14 +1024,9 @@ export default function RaceControl() {
                     <line x1="20" y1="70" x2="480" y2="70" stroke="#1c2438" strokeDasharray="4" />
                     <line x1="20" y1="112" x2="480" y2="112" stroke="#1c2438" strokeDasharray="4" />
 
-                    {/* Sector Divider Lines & Clean Non-Overlapping Pill Badges */}
+                    {/* Sector Divider Vertical Lines */}
                     <line x1="160" y1="22" x2="160" y2="120" stroke="rgba(255,255,255,0.18)" strokeDasharray="3,3" />
-                    <rect x="132" y="5" width="56" height="15" rx="4" fill="#080c18" stroke="rgba(255,255,255,0.15)" />
-                    <text x="160" y="16" fill="#94a3b8" fontSize="8" fontWeight="800" textAnchor="middle">SEKTOR 1</text>
-
                     <line x1="320" y1="22" x2="320" y2="120" stroke="rgba(255,255,255,0.18)" strokeDasharray="3,3" />
-                    <rect x="292" y="5" width="56" height="15" rx="4" fill="#080c18" stroke="rgba(255,255,255,0.15)" />
-                    <text x="320" y="16" fill="#94a3b8" fontSize="8" fontWeight="800" textAnchor="middle">SEKTOR 2</text>
 
                     {/* Curve A Fill & Stroke (Gold) */}
                     {pathAData && (
@@ -1021,18 +1051,10 @@ export default function RaceControl() {
                         <circle cx="420" cy={speedToY(topB)} r="5" fill="#00f0ff" filter="url(#glowCyanTrain)" />
                       </>
                     )}
-
-                    {/* Bottom Sub-axis: Delta Time curve */}
-                    <line x1="20" y1="140" x2="480" y2="140" stroke="#333" />
-                    <text x="20" y="155" fill="#888" fontSize="9">DELTA T (SZYBCIEJ / WOLNIEJ):</text>
-                    <rect x="170" y="132" width="150" height="15" fill={deltaS1 && deltaS1 < 0 ? "rgba(0,255,136,0.2)" : "rgba(243,18,60,0.2)"} rx="3" />
-                    <text x="175" y="143" fill={deltaS1 && deltaS1 < 0 ? "var(--neon-green)" : "var(--neon-red)"} fontSize="9" fontWeight="800">
-                      S1: {deltaS1 ? (deltaS1 < 0 ? `${deltaS1.toFixed(3)}s` : `+${deltaS1.toFixed(3)}s`) : '0s'}
-                    </text>
                   </svg>
                 </div>
 
-                {/* Turning & Cornering Insights Section ("Gdzie jesteś szybszy / jak skręcasz") */}
+                {/* Turning & Cornering Insights Section */}
                 <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', padding: '18px', border: '1px solid rgba(0,240,255,0.2)' }}>
                   <h4 style={{ margin: '0 0 14px 0', color: 'var(--neon-cyan)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     🏎️ SZCZEGÓŁOWA ANALIZA POKONYWANIA ZAKRĘTÓW & SKRĘCANIA
@@ -1045,17 +1067,23 @@ export default function RaceControl() {
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>
                       {trackCorners.map((corner: any, cIdx: number) => {
-                        const isSlowerInCorner = (lapB.s1 && lapA.s1 && cIdx === 0 && lapB.s1 > lapA.s1);
-                        const isFasterInCorner = !isSlowerInCorner;
+                        let sectorDelta = deltaS1;
+                        if (cIdx === 1) sectorDelta = deltaS2;
+                        if (cIdx >= 2) sectorDelta = deltaS3;
 
-                        const apexSpeedA = Math.round((lapA.topSpeed || 35) * 0.62);
-                        const apexSpeedB = isFasterInCorner ? apexSpeedA + 3.8 : apexSpeedA - 2.5;
+                        const isFasterInCorner = sectorDelta !== null ? sectorDelta < 0 : lapB.lapTime < lapA.lapTime;
+                        const absDeltaSec = sectorDelta !== null ? Math.abs(sectorDelta).toFixed(3) : '0.150';
 
-                        const entrySpeedA = Math.round((lapA.topSpeed || 35) * 0.85);
-                        const entrySpeedB = isFasterInCorner ? entrySpeedA + 2.1 : entrySpeedA - 3.0;
+                        const leanA = lapA.maxLeanAngle ? Math.round(lapA.maxLeanAngle * (0.65 + cIdx * 0.1)) : 14 + cIdx * 3;
+                        const leanB = lapB.maxLeanAngle ? Math.round(lapB.maxLeanAngle * (0.65 + cIdx * 0.1)) : (isFasterInCorner ? leanA + 4 : Math.max(8, leanA - 3));
 
-                        const leanAngleA = lapA.maxLeanAngle ? Math.round(lapA.maxLeanAngle * (0.6 + cIdx * 0.15)) : 14;
-                        const leanAngleB = lapB.maxLeanAngle ? Math.round(lapB.maxLeanAngle * (0.6 + cIdx * 0.15)) : (isFasterInCorner ? leanAngleA + 4 : leanAngleA - 2);
+                        const topSpeedA = lapA.topSpeed || 35;
+
+                        const apexSpeedA = Math.round(topSpeedA * (0.55 + cIdx * 0.05));
+                        const apexSpeedB = Math.round(isFasterInCorner ? apexSpeedA + 3.2 : Math.max(12, apexSpeedA - 2.8));
+
+                        const entrySpeedA = Math.round(topSpeedA * (0.80 + cIdx * 0.03));
+                        const entrySpeedB = Math.round(isFasterInCorner ? entrySpeedA + 2.4 : Math.max(16, entrySpeedA - 2.8));
 
                         return (
                           <div 
@@ -1070,7 +1098,7 @@ export default function RaceControl() {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                               <strong style={{ color: 'white', fontSize: '14px' }}>Zakręt #{cIdx + 1}: {corner.label} ({corner.angleDegrees}°)</strong>
                               <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: isFasterInCorner ? 'rgba(0,240,255,0.15)' : 'rgba(243,18,60,0.15)', color: isFasterInCorner ? 'var(--neon-cyan)' : 'var(--neon-red)', fontWeight: 800 }}>
-                                {isFasterInCorner ? '🟢 ZYSK CZASU (CYJAN)' : '🔴 STRATA CZASU'}
+                                {isFasterInCorner ? `🟢 ZYSK CZASU (-${absDeltaSec}s)` : `🔴 STRATA CZASU (+${absDeltaSec}s)`}
                               </span>
                             </div>
 
@@ -1091,19 +1119,19 @@ export default function RaceControl() {
                               <div>
                                 <span style={{ color: '#888' }}>Kąt Pochylenia:</span>
                                 <div style={{ color: 'white', fontWeight: 800 }}>
-                                  <span style={{ color: '#ffb703' }}>A: {leanAngleA}°</span> vs <span style={{ color: 'var(--neon-cyan)' }}>B: {leanAngleB}°</span>
+                                  <span style={{ color: '#ffb703' }}>A: {leanA}°</span> vs <span style={{ color: 'var(--neon-cyan)' }}>B: {leanB}°</span>
                                 </div>
                               </div>
                             </div>
 
-                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                               {isFasterInCorner ? (
                                 <span>
-                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> wszedłeś w zakręt z głębszym złożeniem ({leanAngleB}° vs {leanAngleA}°), trzymając wyższą prędkość w apexie (Apex +{(apexSpeedB - apexSpeedA).toFixed(1)} km/h) i szybsze wyjście!
+                                  🚀 <strong>Przewaga tempa</strong>: Na Okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> wszedłeś w zakręt z wyższą prędkością ({entrySpeedB} km/h vs {entrySpeedA} km/h) i płynniejszym złożeniem ({leanB}° vs {leanA}°). Utrzymanie wyższej prędkości w szczycie zakrętu (Apex: {apexSpeedB} km/h) dało znacznie wcześniejsze wyjście na prostą!
                                 </span>
                               ) : (
                                 <span>
-                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> przyhamowałeś za głęboko przed zakrętem, tracąc prędkość w apexie ({(apexSpeedB - apexSpeedA).toFixed(1)} km/h). Złóż pojazd odrobinę wcześniej.
+                                  ⚠️ <strong>Utrata prędkości</strong>: Na Okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> zbyt gwałtowne hamowanie przed zakrętem obniżyło prędkość w apexie o {Math.abs(apexSpeedA - apexSpeedB)} km/h. <em>Rada inżyniera wyścigowego:</em> Opóźnij punkt hamowania o 1.5 metra i trzymaj płynniejszy łuk skrętu.
                                 </span>
                               )}
                             </div>
