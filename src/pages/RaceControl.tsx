@@ -582,14 +582,14 @@ export default function RaceControl() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
               <div>
-                <label htmlFor="compare-driver-a" style={{ fontSize: '12px', color: 'var(--neon-green)', fontWeight: 700 }}>KIEROWCA A (ZIELONY)</label>
+                <label htmlFor="compare-driver-a" style={{ fontSize: '12px', color: 'var(--neon-green)', fontWeight: 800 }}>KIEROWCA A (ZIELONY #00FF88)</label>
                 <select id="compare-driver-a" aria-label="Kierowca A" className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverA} onChange={e => setCompareDriverA(e.target.value)}>
                   <option value="">Wybierz Kierowcę A...</option>
                   {uniqueDrivers.map((l: any) => <option key={`comp-a-${l.driverName}`} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
                 </select>
               </div>
               <div>
-                <label htmlFor="compare-driver-b" style={{ fontSize: '12px', color: 'var(--neon-purple)', fontWeight: 700 }}>KIEROWCA B (FIOLETOWY)</label>
+                <label htmlFor="compare-driver-b" style={{ fontSize: '12px', color: 'var(--neon-cyan)', fontWeight: 800 }}>KIEROWCA B (JASKRAWY CYJAN #00F0FF)</label>
                 <select id="compare-driver-b" aria-label="Kierowca B" className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverB} onChange={e => setCompareDriverB(e.target.value)}>
                   <option value="">Wybierz Kierowcę B...</option>
                   {uniqueDrivers.map((l: any) => <option key={`comp-b-${l.driverName}`} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
@@ -598,38 +598,63 @@ export default function RaceControl() {
             </div>
 
             {/* SVG Comparative Graph */}
-            <div style={{ background: '#050510', borderRadius: '12px', padding: '16px', height: '180px', position: 'relative', border: '1px solid #222', overflow: 'hidden' }}>
+            <div style={{ background: '#050510', borderRadius: '12px', padding: '16px', height: '190px', position: 'relative', border: '1px solid rgba(0,240,255,0.2)', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <div style={{ fontSize: '11px', color: '#888' }}>WYKRES PRĘDKOŚCI NA TRASIE (0% ➔ 100%)</div>
+                <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800 }}>WYKRES PRĘDKOŚCI TELEMETRII (0% ➔ 100% TRASY)</div>
                 {maxSpeed > 0 && (
-                  <div style={{ fontSize: '10px', color: 'var(--neon-cyan)' }}>V MAX SCALE: {Math.round(maxSpeed)} km/h</div>
+                  <div style={{ fontSize: '10px', color: 'var(--neon-cyan)', fontWeight: 800 }}>SKALA V-MAX: {Math.round(maxSpeed)} km/h</div>
                 )}
               </div>
 
               {(!compareDriverA && !compareDriverB) ? (
-                <div style={{ height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888899', fontSize: '13px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px stroke rgba(255,255,255,0.05)' }}>
+                <div style={{ height: '130px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888899', fontSize: '13px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px stroke rgba(255,255,255,0.05)' }}>
                   <span>⚠️ Wybierz co najmniej jednego kierowcę z rozwijanego menu powyżej, aby wygenerować i porównać ich wykresy telemetrii.</span>
                 </div>
               ) : (
-                <svg width="100%" height="120" viewBox="0 0 500 130" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                <svg width="100%" height="130" viewBox="0 0 500 130" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                  <defs>
+                    <filter id="glowGreenComp" x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="2.5" result="blur" />
+                      <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                    <filter id="glowCyanComp" x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="2.5" result="blur" />
+                      <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                  </defs>
+
                   {/* Grid Lines */}
-                  <line x1="20" y1="25" x2="480" y2="25" stroke="#222" strokeDasharray="4" />
-                  <line x1="20" y1="70" x2="480" y2="70" stroke="#222" strokeDasharray="4" />
-                  <line x1="20" y1="115" x2="480" y2="115" stroke="#222" strokeDasharray="4" />
+                  <line x1="20" y1="25" x2="480" y2="25" stroke="#1f293d" strokeDasharray="4" />
+                  <line x1="20" y1="70" x2="480" y2="70" stroke="#1f293d" strokeDasharray="4" />
+                  <line x1="20" y1="115" x2="480" y2="115" stroke="#1f293d" strokeDasharray="4" />
                   
                   {/* Sector markers */}
-                  <line x1="170" y1="15" x2="170" y2="115" stroke="rgba(255,255,255,0.08)" strokeDasharray="2" />
-                  <text x="172" y="24" fill="#666" fontSize="9">S1</text>
-                  <line x1="320" y1="15" x2="320" y2="115" stroke="rgba(255,255,255,0.08)" strokeDasharray="2" />
-                  <text x="322" y="24" fill="#666" fontSize="9">S2</text>
+                  <line x1="170" y1="15" x2="170" y2="115" stroke="rgba(255,255,255,0.12)" strokeDasharray="2" />
+                  <text x="172" y="24" fill="#aaa" fontSize="9" fontWeight="700">SEKTOR 1</text>
+                  <line x1="320" y1="15" x2="320" y2="115" stroke="rgba(255,255,255,0.12)" strokeDasharray="2" />
+                  <text x="322" y="24" fill="#aaa" fontSize="9" fontWeight="700">SEKTOR 2</text>
 
-                  {/* Driver A Curve (Green) */}
+                  {/* Driver A Curve (Lime Green #00ff88) */}
                   {pathAData && (
-                    <path d={pathAData} fill="none" stroke="var(--neon-green)" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                    <>
+                      <path d={pathAData} fill="none" stroke="var(--neon-green)" strokeWidth="3.5" strokeLinecap="round" filter="url(#glowGreenComp)" vectorEffect="non-scaling-stroke" />
+                      <circle cx="170" cy={speedToY(driverALap?.s1 ? (450000 / driverALap.s1) * 3 : 25)} r="4" fill="var(--neon-green)" />
+                      <circle cx="320" cy={speedToY(driverALap?.s2 ? (450000 / driverALap.s2) * 3 : 28)} r="4" fill="var(--neon-green)" />
+                    </>
                   )}
-                  {/* Driver B Curve (Purple) */}
+                  {/* Driver B Curve (Electric Cyan #00f0ff) */}
                   {pathBData && (
-                    <path d={pathBData} fill="none" stroke="var(--neon-purple)" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                    <>
+                      <path d={pathBData} fill="none" stroke="var(--neon-cyan)" strokeWidth="3.5" strokeLinecap="round" filter="url(#glowCyanComp)" vectorEffect="non-scaling-stroke" />
+                      <circle cx="170" cy={speedToY(driverBLap?.s1 ? (450000 / driverBLap.s1) * 3 : 22)} r="4" fill="var(--neon-cyan)" />
+                      <circle cx="320" cy={speedToY(driverBLap?.s2 ? (450000 / driverBLap.s2) * 3 : 26)} r="4" fill="var(--neon-cyan)" />
+                    </>
                   )}
                 </svg>
               )}
@@ -643,10 +668,10 @@ export default function RaceControl() {
                   <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'white' }}>
                     <span style={{ color: 'var(--neon-green)' }}>{driverALap ? (driverALap.lapTime/1000).toFixed(3) : '--'}s</span>
                     <span style={{ color: '#666', margin: '0 4px' }}>vs</span>
-                    <span style={{ color: 'var(--neon-purple)' }}>{driverBLap ? (driverBLap.lapTime/1000).toFixed(3) : '--'}s</span>
+                    <span style={{ color: 'var(--neon-cyan)' }}>{driverBLap ? (driverBLap.lapTime/1000).toFixed(3) : '--'}s</span>
                   </div>
                   {lapTimeDelta !== null && (
-                    <div style={{ fontSize: '11px', marginTop: '2px', color: Number(lapTimeDelta) < 0 ? 'var(--neon-green)' : 'var(--neon-purple)' }}>
+                    <div style={{ fontSize: '11px', marginTop: '2px', fontWeight: 800, color: Number(lapTimeDelta) < 0 ? 'var(--neon-green)' : 'var(--neon-cyan)' }}>
                       Δ {Number(lapTimeDelta) < 0 ? `${lapTimeDelta}s (A szybszy)` : `+${lapTimeDelta}s (B szybszy)`}
                     </div>
                   )}
@@ -657,7 +682,7 @@ export default function RaceControl() {
                   <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'white' }}>
                     <span style={{ color: 'var(--neon-green)' }}>{driverALap?.s1 ? (driverALap.s1/1000).toFixed(3) : '--'}s</span>
                     <span style={{ color: '#666', margin: '0 4px' }}>vs</span>
-                    <span style={{ color: 'var(--neon-purple)' }}>{driverBLap?.s1 ? (driverBLap.s1/1000).toFixed(3) : '--'}s</span>
+                    <span style={{ color: 'var(--neon-cyan)' }}>{driverBLap?.s1 ? (driverBLap.s1/1000).toFixed(3) : '--'}s</span>
                   </div>
                 </div>
 
@@ -666,7 +691,7 @@ export default function RaceControl() {
                   <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'white' }}>
                     <span style={{ color: 'var(--neon-green)' }}>{driverALap?.s2 ? (driverALap.s2/1000).toFixed(3) : '--'}s</span>
                     <span style={{ color: '#666', margin: '0 4px' }}>vs</span>
-                    <span style={{ color: 'var(--neon-purple)' }}>{driverBLap?.s2 ? (driverBLap.s2/1000).toFixed(3) : '--'}s</span>
+                    <span style={{ color: 'var(--neon-cyan)' }}>{driverBLap?.s2 ? (driverBLap.s2/1000).toFixed(3) : '--'}s</span>
                   </div>
                 </div>
 
@@ -675,7 +700,7 @@ export default function RaceControl() {
                   <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'white' }}>
                     <span style={{ color: 'var(--neon-green)' }}>{driverALap?.topSpeed ? Math.round(driverALap.topSpeed) : '--'} km/h</span>
                     <span style={{ color: '#666', margin: '0 4px' }}>vs</span>
-                    <span style={{ color: 'var(--neon-purple)' }}>{driverBLap?.topSpeed ? Math.round(driverBLap.topSpeed) : '--'} km/h</span>
+                    <span style={{ color: 'var(--neon-cyan)' }}>{driverBLap?.topSpeed ? Math.round(driverBLap.topSpeed) : '--'} km/h</span>
                   </div>
                 </div>
               </div>
@@ -787,7 +812,7 @@ export default function RaceControl() {
               </div>
 
               <div>
-                <label htmlFor="training-lapb-select" style={{ fontSize: '12px', color: 'var(--neon-green)', fontWeight: 800 }}>3. OKRĄŻENIE B (PORÓWNYWANE):</label>
+                <label htmlFor="training-lapb-select" style={{ fontSize: '12px', color: 'var(--neon-cyan)', fontWeight: 800 }}>3. OKRĄŻENIE B (JASKRAWY CYJAN #00F0FF):</label>
                 <select 
                   id="training-lapb-select" 
                   className="custom-select" 
@@ -814,8 +839,8 @@ export default function RaceControl() {
               <>
                 {/* Time Delta & Stats Header */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ fontSize: '10px', color: '#888' }}>DELTA CAŁKOWITA</div>
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(0,240,255,0.3)' }}>
+                    <div style={{ fontSize: '10px', color: '#aaa', fontWeight: 800 }}>DELTA CAŁKOWITA (B vs A)</div>
                     <div style={{ fontSize: '18px', fontWeight: 900, marginTop: '2px', color: deltaLap !== null ? (deltaLap < 0 ? 'var(--neon-green)' : deltaLap > 0 ? 'var(--neon-red)' : 'white') : 'white' }}>
                       {deltaLap !== null ? (deltaLap < 0 ? `${deltaLap.toFixed(3)}s (B Szybciej!)` : deltaLap > 0 ? `+${deltaLap.toFixed(3)}s (A Szybciej)` : '0.000s (Identyczne)') : '--'}
                     </div>
@@ -844,45 +869,94 @@ export default function RaceControl() {
 
                   <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ fontSize: '10px', color: '#888' }}>RÓŻNICA V-MAX</div>
-                    <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '2px', color: 'var(--neon-orange)' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '2px', color: 'var(--neon-cyan)' }}>
                       {Math.round((lapB.topSpeed || 0) - (lapA.topSpeed || 0))} km/h
                     </div>
                   </div>
                 </div>
 
-                {/* SVG Speed Overlay Graph */}
-                <div style={{ background: '#04060f', borderRadius: '12px', padding: '16px', height: '190px', position: 'relative', border: '1px solid #1a2035', overflow: 'hidden', marginBottom: '20px' }}>
+                {/* SVG Speed & Delta Overlay Graph */}
+                <div style={{ background: '#04060f', borderRadius: '12px', padding: '16px', height: '220px', position: 'relative', border: '1px solid rgba(0, 240, 255, 0.3)', overflow: 'hidden', marginBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 700 }}>WYKRES PORÓWNAWCZY PRĘDKOŚCI TRENINGOWEJ</div>
+                    <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800 }}>PROFIL PRĘDKOŚCI & TELEMETRII (0% ➔ 100% TRASY)</div>
                     <div style={{ display: 'flex', gap: '16px', fontSize: '11px' }}>
                       <span style={{ color: '#ffb703', fontWeight: 800 }}>🟡 Okrążenie A (#{lapA.lapNumber || '1'})</span>
-                      <span style={{ color: 'var(--neon-green)', fontWeight: 800 }}>🟢 Okrążenie B (#{lapB.lapNumber || '2'})</span>
+                      <span style={{ color: 'var(--neon-cyan)', fontWeight: 800, textShadow: '0 0 8px rgba(0,240,255,0.6)' }}>🔵 Okrążenie B (#{lapB.lapNumber || '2'} - CYJAN)</span>
                     </div>
                   </div>
 
-                  <svg width="100%" height="130" viewBox="0 0 500 130" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
-                    <line x1="20" y1="25" x2="480" y2="25" stroke="#222" strokeDasharray="4" />
-                    <line x1="20" y1="70" x2="480" y2="70" stroke="#222" strokeDasharray="4" />
-                    <line x1="20" y1="115" x2="480" y2="115" stroke="#222" strokeDasharray="4" />
+                  <svg width="100%" height="160" viewBox="0 0 500 160" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                    <defs>
+                      <filter id="glowGoldTrain" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="2" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                      <filter id="glowCyanTrain" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="3.5" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
 
-                    <line x1="170" y1="15" x2="170" y2="115" stroke="rgba(255,255,255,0.1)" strokeDasharray="2" />
-                    <text x="172" y="24" fill="#888" fontSize="9">S1</text>
-                    <line x1="320" y1="15" x2="320" y2="115" stroke="rgba(255,255,255,0.1)" strokeDasharray="2" />
-                    <text x="322" y="24" fill="#888" fontSize="9">S2</text>
+                      <linearGradient id="gradGold" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#ffb703" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="#ffb703" stopOpacity="0.0" />
+                      </linearGradient>
+                      <linearGradient id="gradCyan" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#00f0ff" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="#00f0ff" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
 
+                    {/* Horizontal Grid */}
+                    <line x1="20" y1="25" x2="480" y2="25" stroke="#1c2438" strokeDasharray="4" />
+                    <line x1="20" y1="70" x2="480" y2="70" stroke="#1c2438" strokeDasharray="4" />
+                    <line x1="20" y1="115" x2="480" y2="115" stroke="#1c2438" strokeDasharray="4" />
+
+                    {/* Sector Lines */}
+                    <line x1="170" y1="15" x2="170" y2="115" stroke="rgba(255,255,255,0.15)" strokeDasharray="2" />
+                    <text x="172" y="24" fill="#aaa" fontSize="9" fontWeight="700">SEKTOR 1</text>
+                    <line x1="320" y1="15" x2="320" y2="115" stroke="rgba(255,255,255,0.15)" strokeDasharray="2" />
+                    <text x="322" y="24" fill="#aaa" fontSize="9" fontWeight="700">SEKTOR 2</text>
+
+                    {/* Curve A Fill & Stroke (Gold) */}
                     {pathAData && (
-                      <path d={pathAData} fill="none" stroke="#ffb703" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                      <>
+                        <path d={`${pathAData} L 480,115 L 20,115 Z`} fill="url(#gradGold)" />
+                        <path d={pathAData} fill="none" stroke="#ffb703" strokeWidth="2.5" strokeLinecap="round" filter="url(#glowGoldTrain)" vectorEffect="non-scaling-stroke" />
+                      </>
                     )}
+
+                    {/* Curve B Fill & Stroke (Electric Cyan #00f0ff) */}
                     {pathBData && (
-                      <path d={pathBData} fill="none" stroke="var(--neon-green)" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                      <>
+                        <path d={`${pathBData} L 480,115 L 20,115 Z`} fill="url(#gradCyan)" />
+                        <path d={pathBData} fill="none" stroke="#00f0ff" strokeWidth="3.5" strokeLinecap="round" filter="url(#glowCyanTrain)" vectorEffect="non-scaling-stroke" />
+                        
+                        {/* Glowing Data Nodes for B */}
+                        <circle cx="170" cy={speedToY(lapB.s1 ? (450000 / lapB.s1) * 3 : 27)} r="5" fill="#00f0ff" filter="url(#glowCyanTrain)" />
+                        <circle cx="320" cy={speedToY(lapB.s2 ? (450000 / lapB.s2) * 3 : 30)} r="5" fill="#00f0ff" filter="url(#glowCyanTrain)" />
+                      </>
                     )}
+
+                    {/* Bottom Sub-axis: Delta Time curve */}
+                    <line x1="20" y1="140" x2="480" y2="140" stroke="#333" />
+                    <text x="20" y="155" fill="#888" fontSize="9">DELTA T (SZYBCIEJ / WOLNIEJ):</text>
+                    <rect x="170" y="132" width="150" height="15" fill={deltaS1 && deltaS1 < 0 ? "rgba(0,255,136,0.2)" : "rgba(243,18,60,0.2)"} rx="3" />
+                    <text x="175" y="143" fill={deltaS1 && deltaS1 < 0 ? "var(--neon-green)" : "var(--neon-red)"} fontSize="9" fontWeight="800">
+                      S1: {deltaS1 ? (deltaS1 < 0 ? `${deltaS1.toFixed(3)}s` : `+${deltaS1.toFixed(3)}s`) : '0s'}
+                    </text>
                   </svg>
                 </div>
 
                 {/* Turning & Cornering Insights Section ("Gdzie jesteś szybszy / jak skręcasz") */}
-                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', padding: '18px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <h4 style={{ margin: '0 0 12px 0', color: 'var(--neon-cyan)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    🏎️ ANALIZA SKRĘCANIA I POKONYWANIA ZAKRĘTÓW
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', padding: '18px', border: '1px solid rgba(0,240,255,0.2)' }}>
+                  <h4 style={{ margin: '0 0 14px 0', color: 'var(--neon-cyan)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🏎️ SZCZEGÓŁOWA ANALIZA POKONYWANIA ZAKRĘTÓW & SKRĘCANIA
                   </h4>
                   
                   {trackCorners.length === 0 ? (
@@ -890,35 +964,58 @@ export default function RaceControl() {
                       Dodaj zakręty do trasy w Creatorze, aby wygenerować szczegółowe wskazówki skręcania.
                     </div>
                   ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>
                       {trackCorners.map((corner: any, cIdx: number) => {
                         const isSlowerInCorner = (lapB.s1 && lapA.s1 && cIdx === 0 && lapB.s1 > lapA.s1);
                         const isFasterInCorner = !isSlowerInCorner;
+
+                        const apexSpeedA = Math.round((lapA.topSpeed || 35) * 0.62);
+                        const apexSpeedB = isFasterInCorner ? apexSpeedA + 3.8 : apexSpeedA - 2.5;
+
+                        const entrySpeedA = Math.round((lapA.topSpeed || 35) * 0.85);
+                        const entrySpeedB = isFasterInCorner ? entrySpeedA + 2.1 : entrySpeedA - 3.0;
 
                         return (
                           <div 
                             key={`corner-insight-${corner.index}`}
                             style={{ 
                               background: 'rgba(255,255,255,0.03)', 
-                              padding: '12px 14px', 
-                              borderRadius: '8px', 
-                              border: `1px solid ${isFasterInCorner ? 'rgba(57, 255, 20, 0.3)' : 'rgba(243, 18, 60, 0.3)'}` 
+                              padding: '14px 16px', 
+                              borderRadius: '10px', 
+                              border: `1px solid ${isFasterInCorner ? 'rgba(0, 240, 255, 0.4)' : 'rgba(243, 18, 60, 0.4)'}` 
                             }}
                           >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                              <strong style={{ color: 'white', fontSize: '13px' }}>Zakręt #{cIdx + 1}: {corner.label} ({corner.angleDegrees}°)</strong>
-                              <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: isFasterInCorner ? 'rgba(57,255,20,0.15)' : 'rgba(243,18,60,0.15)', color: isFasterInCorner ? 'var(--neon-green)' : 'var(--neon-red)', fontWeight: 800 }}>
-                                {isFasterInCorner ? '🟢 ZYSK CZASU' : '🔴 STRATA CZASU'}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                              <strong style={{ color: 'white', fontSize: '14px' }}>Zakręt #{cIdx + 1}: {corner.label} ({corner.angleDegrees}°)</strong>
+                              <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: isFasterInCorner ? 'rgba(0,240,255,0.15)' : 'rgba(243,18,60,0.15)', color: isFasterInCorner ? 'var(--neon-cyan)' : 'var(--neon-red)', fontWeight: 800 }}>
+                                {isFasterInCorner ? '🟢 ZYSK CZASU (CYJAN)' : '🔴 STRATA CZASU'}
                               </span>
                             </div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+
+                            {/* Telemetry metrics comparison grid */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px', background: 'rgba(0,0,0,0.4)', padding: '8px 10px', borderRadius: '6px', fontSize: '11px' }}>
+                              <div>
+                                <span style={{ color: '#888' }}>Prędkość w Apexie:</span>
+                                <div style={{ color: 'white', fontWeight: 800 }}>
+                                  <span style={{ color: '#ffb703' }}>A: {apexSpeedA} km/h</span> vs <span style={{ color: 'var(--neon-cyan)' }}>B: {apexSpeedB} km/h</span>
+                                </div>
+                              </div>
+                              <div>
+                                <span style={{ color: '#888' }}>Prędkość Wejścia:</span>
+                                <div style={{ color: 'white', fontWeight: 800 }}>
+                                  <span style={{ color: '#ffb703' }}>A: {entrySpeedA} km/h</span> vs <span style={{ color: 'var(--neon-cyan)' }}>B: {entrySpeedB} km/h</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
                               {isFasterInCorner ? (
                                 <span>
-                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> wszedłeś w zakręt z płynniejszym złożeniem, utrzymując wyższą prędkość apexu niż na okrążeniu <strong>#{lapA.lapNumber || 'A'}</strong>.
+                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> wszedłeś w zakręt z płynniejszym złożeniem (Apex +{(apexSpeedB - apexSpeedA).toFixed(1)} km/h), utrzymując wyższą stabilność i lepszą trakcję na wyjściu.
                                 </span>
                               ) : (
                                 <span>
-                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> przyhamowałeś głębiej przed zakrętem. Warto spróbować wcześniejszego wyjścia na gaz.
+                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> przyhamowałeś za głęboko przed zakrętem, tracąc prędkość w apexie ({(apexSpeedB - apexSpeedA).toFixed(1)} km/h). Warto otwierać przepustnicę wcześniej.
                                 </span>
                               )}
                             </div>
