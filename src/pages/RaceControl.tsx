@@ -21,6 +21,7 @@ export default function RaceControl() {
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayProgress, setReplayProgress] = useState(0);
   const [replaySpeed, setReplaySpeed] = useState<1 | 2 | 5>(1);
+  const [viewMode, setViewMode] = useState<'leaderboard' | 'all'>('leaderboard');
   
   const seenDriversRef = useRef<Set<string>>(new Set());
   
@@ -217,6 +218,63 @@ export default function RaceControl() {
 
   const sortedLaps = [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime);
   const bestLap = sortedLaps[0];
+
+  // Unique list of drivers with their single best lap
+  const uniqueDrivers = useMemo(() => {
+    const driverMap = new Map<string, any>();
+    sortedLaps.forEach((lap: any) => {
+      if (!driverMap.has(lap.driverName) || lap.lapTime < driverMap.get(lap.driverName).lapTime) {
+        driverMap.set(lap.driverName, lap);
+      }
+    });
+    return Array.from(driverMap.values());
+  }, [sortedLaps]);
+
+  // Displayed laps based on mode (Klasyfikacja vs Wszystkie okrążenia)
+  const displayedLaps = useMemo(() => {
+    if (viewMode === 'leaderboard') {
+      return uniqueDrivers;
+    }
+    return sortedLaps;
+  }, [viewMode, uniqueDrivers, sortedLaps]);
+
+  // Compute sector statistics across all laps & personal bests per driver
+  const sectorStats = useMemo(() => {
+    const allS1 = laps.map((l: any) => l.s1).filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const allS2 = laps.map((l: any) => l.s2).filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const allS3 = laps.map((l: any) => l.s3).filter((v: any): v is number => typeof v === 'number' && v > 0);
+
+    const overallS1 = allS1.length > 0 ? Math.min(...allS1) : null;
+    const overallS2 = allS2.length > 0 ? Math.min(...allS2) : null;
+    const overallS3 = allS3.length > 0 ? Math.min(...allS3) : null;
+
+    const personalMap = new Map<string, { s1: number | null; s2: number | null; s3: number | null }>();
+
+    laps.forEach((l: any) => {
+      const name = l.driverName;
+      if (!personalMap.has(name)) {
+        personalMap.set(name, { s1: null, s2: null, s3: null });
+      }
+      const p = personalMap.get(name)!;
+      if (typeof l.s1 === 'number' && l.s1 > 0 && (p.s1 === null || l.s1 < p.s1)) p.s1 = l.s1;
+      if (typeof l.s2 === 'number' && l.s2 > 0 && (p.s2 === null || l.s2 < p.s2)) p.s2 = l.s2;
+      if (typeof l.s3 === 'number' && l.s3 > 0 && (p.s3 === null || l.s3 < p.s3)) p.s3 = l.s3;
+    });
+
+    return { overallS1, overallS2, overallS3, personalMap };
+  }, [laps]);
+
+  const getSectorColor = (
+    val: number | undefined | null,
+    personalBest: number | null | undefined,
+    overallBest: number | null | undefined
+  ): string => {
+    if (val === undefined || val === null || val <= 0) return 'var(--text-secondary)';
+    if (overallBest && val <= overallBest) return 'var(--neon-purple)';
+    if (personalBest && val <= personalBest) return 'var(--neon-green)';
+    return 'var(--neon-yellow)';
+  };
+
   // Vehicle status must not depend on someone having completed a full lap -
   // fall back to any recently active driver in this category so speed/G-force
   // still show up before the first lap/sector time is recorded.
@@ -474,14 +532,14 @@ export default function RaceControl() {
                 <label htmlFor="compare-driver-a" style={{ fontSize: '12px', color: 'var(--neon-green)', fontWeight: 700 }}>KIEROWCA A (ZIELONY)</label>
                 <select id="compare-driver-a" aria-label="Kierowca A" className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverA} onChange={e => setCompareDriverA(e.target.value)}>
                   <option value="">Wybierz Kierowcę A...</option>
-                  {sortedLaps.map((l: any) => <option key={`comp-a-${l._id}`} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
+                  {uniqueDrivers.map((l: any) => <option key={`comp-a-${l.driverName}`} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
                 </select>
               </div>
               <div>
                 <label htmlFor="compare-driver-b" style={{ fontSize: '12px', color: 'var(--neon-purple)', fontWeight: 700 }}>KIEROWCA B (FIOLETOWY)</label>
                 <select id="compare-driver-b" aria-label="Kierowca B" className="custom-select" style={{ width: '100%', marginTop: '4px' }} value={compareDriverB} onChange={e => setCompareDriverB(e.target.value)}>
                   <option value="">Wybierz Kierowcę B...</option>
-                  {sortedLaps.map((l: any) => <option key={`comp-b-${l._id}`} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
+                  {uniqueDrivers.map((l: any) => <option key={`comp-b-${l.driverName}`} value={l.driverName}>{l.driverName} ({(l.lapTime/1000).toFixed(3)}s)</option>)}
                 </select>
               </div>
             </div>
@@ -686,9 +744,44 @@ export default function RaceControl() {
 
       {/* Timing Board (Bottom) */}
       <div className="bento-card glass-panel">
-        <div className="card-header">
-          <h3>Live Timing</h3>
-          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Kliknij kierowcę by otworzyć LIVE FOCUS</span>
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Live Timing</h3>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Kliknij kierowcę by otworzyć LIVE FOCUS</span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '6px', background: 'rgba(0,0,0,0.5)', padding: '4px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)' }}>
+            <button
+              onClick={() => setViewMode('leaderboard')}
+              style={{
+                padding: '6px 14px',
+                fontSize: '11px',
+                borderRadius: '8px',
+                background: viewMode === 'leaderboard' ? 'var(--neon-cyan)' : 'transparent',
+                color: viewMode === 'leaderboard' ? '#000' : 'var(--text-secondary)',
+                fontWeight: 900,
+                border: 'none',
+                transition: 'all 0.2s'
+              }}
+            >
+              🏆 KLASYFIKACJA (LIDERZY)
+            </button>
+            <button
+              onClick={() => setViewMode('all')}
+              style={{
+                padding: '6px 14px',
+                fontSize: '11px',
+                borderRadius: '8px',
+                background: viewMode === 'all' ? 'var(--neon-cyan)' : 'transparent',
+                color: viewMode === 'all' ? '#000' : 'var(--text-secondary)',
+                fontWeight: 900,
+                border: 'none',
+                transition: 'all 0.2s'
+              }}
+            >
+              📋 WSZYSTKIE OKRĄŻENIA ({laps.length})
+            </button>
+          </div>
         </div>
         
         <div style={{ overflowX: 'auto' }}>
@@ -707,9 +800,14 @@ export default function RaceControl() {
             </thead>
             <tbody>
               <AnimatePresence>
-                {sortedLaps.map((lap: any, index: number) => {
+                {displayedLaps.map((lap: any, index: number) => {
                   const deltaToLeader = index === 0 ? null : lap.lapTime - bestLap.lapTime;
                   const isFocused = focusedDriver === lap.driverName;
+                  const pBest = sectorStats.personalMap.get(lap.driverName);
+
+                  const s1Color = getSectorColor(lap.s1, pBest?.s1, sectorStats.overallS1);
+                  const s2Color = getSectorColor(lap.s2, pBest?.s2, sectorStats.overallS2);
+                  const s3Color = getSectorColor(lap.s3, pBest?.s3, sectorStats.overallS3);
                   
                   return (
                     <React.Fragment key={lap._id}>
@@ -728,9 +826,9 @@ export default function RaceControl() {
                       >
                         <td style={{ color: index === 0 ? 'var(--neon-purple)' : 'white', fontWeight: 900, fontSize: '18px' }}>{index + 1}</td>
                         <td style={{ fontWeight: 800, fontSize: '16px', color: isFocused ? 'var(--neon-blue)' : 'white' }}>{lap.driverName}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{lap.s1 ? (lap.s1/1000).toFixed(3) : '---'}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{lap.s2 ? (lap.s2/1000).toFixed(3) : '---'}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{lap.s3 ? (lap.s3/1000).toFixed(3) : '---'}</td>
+                        <td style={{ color: s1Color, fontWeight: 700 }}>{lap.s1 ? (lap.s1/1000).toFixed(3) : '---'}</td>
+                        <td style={{ color: s2Color, fontWeight: 700 }}>{lap.s2 ? (lap.s2/1000).toFixed(3) : '---'}</td>
+                        <td style={{ color: s3Color, fontWeight: 700 }}>{lap.s3 ? (lap.s3/1000).toFixed(3) : '---'}</td>
                         <td style={{ color: index === 0 ? 'var(--neon-purple)' : 'var(--neon-green)', fontWeight: 900, fontSize: '18px' }}>
                           {(lap.lapTime/1000).toFixed(3)}
                         </td>
@@ -808,7 +906,7 @@ export default function RaceControl() {
                   <td style={{ color: 'var(--text-secondary)' }}>—</td>
                 </tr>
               ))}
-              {sortedLaps.length === 0 && inProgressDrivers.length === 0 && (
+              {displayedLaps.length === 0 && inProgressDrivers.length === 0 && (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
                     Brak wyników. Czekamy na czasy okrążeń!
@@ -817,6 +915,22 @@ export default function RaceControl() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Legend for Sector Colors */}
+        <div style={{ display: 'flex', gap: '16px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--neon-purple)', boxShadow: '0 0 6px var(--neon-purple)' }} />
+            <span>🟣 Rekord Sesji (Overall Best)</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--neon-green)', boxShadow: '0 0 6px var(--neon-green)' }} />
+            <span>🟢 Rekord Osobisty (Personal Best)</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--neon-yellow)', boxShadow: '0 0 6px var(--neon-yellow)' }} />
+            <span>🟡 Wolniej od Rekordu Osobistego</span>
+          </div>
         </div>
       </div>
 

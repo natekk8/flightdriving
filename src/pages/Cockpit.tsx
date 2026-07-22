@@ -99,6 +99,34 @@ export default function Cockpit() {
     bestLapRef.current = laps.length > 0 ? [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime)[0] : null;
   }, [laps]);
 
+  const sectorStats = useMemo(() => {
+    const allS1 = laps.map((l: any) => l.s1).filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const allS2 = laps.map((l: any) => l.s2).filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const allS3 = laps.map((l: any) => l.s3).filter((v: any): v is number => typeof v === 'number' && v > 0);
+
+    const overallS1 = allS1.length > 0 ? Math.min(...allS1) : null;
+    const overallS2 = allS2.length > 0 ? Math.min(...allS2) : null;
+    const overallS3 = allS3.length > 0 ? Math.min(...allS3) : null;
+
+    const myLaps = laps.filter((l: any) => l.driverName === driverName);
+    const myS1 = myLaps.map((l: any) => l.s1).filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const myS2 = myLaps.map((l: any) => l.s2).filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const myS3 = myLaps.map((l: any) => l.s3).filter((v: any): v is number => typeof v === 'number' && v > 0);
+
+    const personalS1 = myS1.length > 0 ? Math.min(...myS1) : null;
+    const personalS2 = myS2.length > 0 ? Math.min(...myS2) : null;
+    const personalS3 = myS3.length > 0 ? Math.min(...myS3) : null;
+
+    return { overallS1, overallS2, overallS3, personalS1, personalS2, personalS3 };
+  }, [laps, driverName]);
+
+  const getSectorColor = (val: number | null, personalMin: number | null, overallMin: number | null) => {
+    if (!val || val <= 0) return '#888899';
+    if (overallMin && val <= overallMin) return 'var(--neon-purple)';
+    if (personalMin && val <= personalMin) return 'var(--neon-green)';
+    return 'var(--neon-yellow)';
+  };
+
   const validateTrackConfig = (track: any): string | null => {
     if (!track || !track.path || track.path.length < 2) {
       return 'Ta trasa nie ma poprawnie zdefiniowanej ścieżki (min. 2 punkty). Popraw ją w Ustawieniach Trasy.';
@@ -785,15 +813,15 @@ export default function Cockpit() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2px', background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)' }}>
           <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px 8px', textAlign: 'center' }}>
             <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800, marginBottom: '4px' }}>SEKTOR 1</div>
-            <div className="font-digital" style={{ fontSize: 'clamp(18px, 4vw, 28px)', color: s1Time ? 'white' : '#888899' }}>{s1Time ? (s1Time/1000).toFixed(3) : '--.---'}</div>
+            <div className="font-digital" style={{ fontSize: 'clamp(18px, 4vw, 28px)', color: getSectorColor(s1Time, sectorStats.personalS1, sectorStats.overallS1) }}>{s1Time ? (s1Time/1000).toFixed(3) : '--.---'}</div>
           </div>
           <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px 8px', textAlign: 'center' }}>
             <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800, marginBottom: '4px' }}>SEKTOR 2</div>
-            <div className="font-digital" style={{ fontSize: 'clamp(18px, 4vw, 28px)', color: s2Time ? 'white' : '#888899' }}>{s2Time ? (s2Time/1000).toFixed(3) : '--.---'}</div>
+            <div className="font-digital" style={{ fontSize: 'clamp(18px, 4vw, 28px)', color: getSectorColor(s2Time, sectorStats.personalS2, sectorStats.overallS2) }}>{s2Time ? (s2Time/1000).toFixed(3) : '--.---'}</div>
           </div>
           <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px 8px', textAlign: 'center' }}>
             <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 800, marginBottom: '4px' }}>SEKTOR 3 (LAP)</div>
-            <div className="font-digital" style={{ fontSize: 'clamp(18px, 4vw, 28px)', color: s3Time ? 'var(--neon-purple)' : '#888899' }}>{s3Time ? (s3Time/1000).toFixed(3) : '--.---'}</div>
+            <div className="font-digital" style={{ fontSize: 'clamp(18px, 4vw, 28px)', color: getSectorColor(s3Time, sectorStats.personalS3, sectorStats.overallS3) }}>{s3Time ? (s3Time/1000).toFixed(3) : '--.---'}</div>
           </div>
         </div>
       </div>
