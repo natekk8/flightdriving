@@ -354,7 +354,7 @@ export default function RaceControl() {
     [telemetry, selectedTrack]
   );
 
-  // Heatmap rendering effect (Invention 2: Smart Braking & Acceleration Zone Heatmap)
+  // Heatmap rendering effect (Smart Braking, Corner Apex & Acceleration Zone Heatmap)
   useEffect(() => {
     if (!leafletMap.current) return;
     if (!heatmapLayerGroup.current) {
@@ -368,28 +368,41 @@ export default function RaceControl() {
     if (!track || !track.path || track.path.length < 2) return;
 
     const path = track.path;
-    const gForce = selectedTrackTelemetry?.gForce || 0;
+    const corners = calculateTrackCorners(path);
+    const cornerIndices = new Set(corners.map((c: any) => c.index));
+    const liveGForce = selectedTrackTelemetry?.gForce || 0;
 
-    // Draw Smart Heatmap segments
+    // Draw Smart Telemetry Heatmap segments
     for (let i = 0; i < path.length - 1; i++) {
       const p1 = path[i];
       const p2 = path[i + 1];
 
-      let color = '#00f0ff';
-      if (gForce < -0.3 || (i % 6 === 1 || i % 6 === 2)) {
-        color = '#ff0033'; // Red braking zone
-      } else if (gForce > 0.3 || (i % 6 === 4 || i % 6 === 5)) {
-        color = '#39ff14'; // Green acceleration zone
-      } else {
-        color = '#ffb703'; // Yellow coasting
+      let color = '#00ff88'; // Default Green (Full Acceleration / Straight)
+      let label = '🟢 Strefa Przyspieszania / V-Max';
+
+      // Check if approaching a corner (Braking Zone)
+      const isApproachingCorner = corners.some((c: any) => i >= c.index - 3 && i < c.index);
+      const isAtApex = cornerIndices.has(i) || corners.some((c: any) => i === c.index);
+
+      if (liveGForce < -0.25 || isApproachingCorner) {
+        color = '#f3123c'; // Red braking zone
+        label = '🔴 Strefa Dohamowania przed zakrętem';
+      } else if (isAtApex) {
+        color = '#ffb703'; // Yellow apex/coasting
+        label = '🟡 Apex Zakrętu (Prędkość Minimalna)';
+      } else if (liveGForce > 0.25) {
+        color = '#00ff88'; // Neon green full throttle
+        label = '🟢 Pełny Gaz (Maksymalne przyspieszenie)';
       }
 
-      L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
+      const segment = L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
         color,
-        weight: 7,
-        opacity: 0.85,
+        weight: 8,
+        opacity: 0.88,
         lineCap: 'round'
-      }).addTo(heatmapLayerGroup.current);
+      });
+      segment.bindTooltip(label, { sticky: true });
+      segment.addTo(heatmapLayerGroup.current);
     }
   }, [showHeatmap, selectedTrack, tracks, selectedTrackTelemetry?.gForce]);
 

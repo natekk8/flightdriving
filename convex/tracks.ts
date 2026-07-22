@@ -23,6 +23,21 @@ export const saveTrack = mutation({
   },
 });
 
+export const updateTrack = mutation({
+  args: {
+    id: v.id("tracks"),
+    name: v.string(),
+    path: v.array(v.object({ lat: v.number(), lon: v.number() })),
+    s1Index: v.optional(v.number()),
+    s2Index: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...data } = args;
+    await ctx.db.patch(id, data);
+    return id;
+  },
+});
+
 export const deleteTrack = mutation({
   args: { id: v.id("tracks") },
   handler: async (ctx, args) => {

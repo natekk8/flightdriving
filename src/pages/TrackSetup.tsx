@@ -9,11 +9,30 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 type Point = { lat: number; lon: number };
 
+function haversineMeters(p1: Point, p2: Point) {
+  const R = 6371000;
+  const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+  const dLon = (p2.lon - p1.lon) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calculatePathMeters(pts: Point[]) {
+  let len = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    len += haversineMeters(pts[i], pts[i + 1]);
+  }
+  return Math.round(len);
+}
+
 export default function TrackSetup() {
   const [trackName, setTrackName] = useState('');
   const [path, setPath] = useState<Point[]>([]);
   const [s1Index, setS1Index] = useState<number | undefined>();
   const [s2Index, setS2Index] = useState<number | undefined>();
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [mode, setMode] = useState<'draw' | 's1' | 's2'>('draw');
   const [labelsVisible, setLabelsVisible] = useState(true);
   const [showTrackList, setShowTrackList] = useState(false);
@@ -24,6 +43,8 @@ export default function TrackSetup() {
   const tracks = useMemo(() => rawTracks ?? [], [rawTracks]);
   // @ts-ignore
   const saveTrack = useMutation(api.tracks.saveTrack);
+  // @ts-ignore
+  const updateTrack = useMutation(api.tracks.updateTrack);
   // @ts-ignore
   const deleteTrack = useMutation(api.tracks.deleteTrack);
 
@@ -44,6 +65,24 @@ export default function TrackSetup() {
 
   // Corner analysis for current path
   const corners = useMemo(() => calculateTrackCorners(path), [path]);
+
+  // Real sector distance preview metrics
+  const sectorMetrics = useMemo(() => {
+    if (path.length < 2) return null;
+    const s1 = s1Index ?? path.length;
+    const s2 = s2Index ?? path.length;
+
+    const p1 = path.slice(0, Math.min(s1 + 1, path.length));
+    const p2 = path.slice(Math.min(s1, path.length - 1), Math.min(s2 + 1, path.length));
+    const p3 = path.slice(Math.min(s2, path.length - 1));
+
+    const s1Len = calculatePathMeters(p1);
+    const s2Len = calculatePathMeters(p2);
+    const s3Len = calculatePathMeters(p3);
+    const total = s1Len + s2Len + s3Len;
+
+    return { s1Len, s2Len, s3Len, total };
+  }, [path, s1Index, s2Index]);
 
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
@@ -78,7 +117,7 @@ export default function TrackSetup() {
     }
   }, [labelsVisible]);
 
-  // Render Polylines, Markers, and Corner Badges
+  // Render Polylines, Markers, Draggable Nodes & Corner Badges
   useEffect(() => {
     if (!layerGroup.current) return;
     layerGroup.current.clearLayers();
@@ -90,9 +129,9 @@ export default function TrackSetup() {
     const p2 = path.slice(s1, s2 + 1);
     const p3 = path.slice(s2, path.length);
 
-    if (p1.length > 0) L.polyline(p1 as any, { color: '#00f0ff', weight: 6, opacity: 0.8 }).addTo(layerGroup.current);
-    if (p2.length > 0) L.polyline(p2 as any, { color: '#f3123c', weight: 6, opacity: 0.8 }).addTo(layerGroup.current);
-    if (p3.length > 0) L.polyline(p3 as any, { color: '#39ff14', weight: 6, opacity: 0.8 }).addTo(layerGroup.current);
+    if (p1.length > 0) L.polyline(p1 as any, { color: '#00f0ff', weight: 6, opacity: 0.85 }).addTo(layerGroup.current);
+    if (p2.length > 0) L.polyline(p2 as any, { color: '#f3123c', weight: 6, opacity: 0.85 }).addTo(layerGroup.current);
+    if (p3.length > 0) L.polyline(p3 as any, { color: '#39ff14', weight: 6, opacity: 0.85 }).addTo(layerGroup.current);
 
     // Corner Badges
     const cornerMap = new Map(corners.map(c => [c.index, c]));
@@ -104,21 +143,21 @@ export default function TrackSetup() {
       const isS2 = idx === s2Index;
       const corner = cornerMap.get(idx);
       
-      let html = `<div style="width:100%;height:100%;border-radius:50%;background:rgba(255,255,255,0.4);border:1px solid white;"></div>`;
+      let html = `<div style="width:100%;height:100%;border-radius:50%;background:rgba(255,255,255,0.6);border:1.5px solid white;"></div>`;
       let size = 12;
 
       if (isStart) {
-        html = `<div style="width:100%;height:100%;border-radius:50%;background:#00f0ff;box-shadow:0 0 10px #00f0ff;border:2px solid white;"></div>`;
-        size = 18;
+        html = `<div style="background:#080c18;color:#00f0ff;border:2px solid #00f0ff;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:900;white-space:nowrap;box-shadow:0 0 12px #00f0ff;">🏁 START</div>`;
+        size = 24;
       } else if (isFinish) {
-        html = `<div style="width:100%;height:100%;border-radius:50%;background:#39ff14;box-shadow:0 0 10px #39ff14;border:2px solid white;"></div>`;
-        size = 18;
+        html = `<div style="background:#080c18;color:#39ff14;border:2px solid #39ff14;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:900;white-space:nowrap;box-shadow:0 0 12px #39ff14;">🏁 META</div>`;
+        size = 24;
       } else if (isS1) {
-        html = `<div style="width:100%;height:100%;border-radius:50%;background:#f3123c;box-shadow:0 0 15px #f3123c;border:3px solid white;animation: pulse 1.5s infinite;"></div>`;
-        size = 24;
+        html = `<div style="background:#080c18;color:#f3123c;border:2px solid #f3123c;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:900;white-space:nowrap;box-shadow:0 0 15px #f3123c;animation: pulse 1.5s infinite;">🚩 SEKTOR 1 (SPLIT)</div>`;
+        size = 26;
       } else if (isS2) {
-        html = `<div style="width:100%;height:100%;border-radius:50%;background:#ff9100;box-shadow:0 0 15px #ff9100;border:3px solid white;animation: pulse 1.5s infinite;"></div>`;
-        size = 24;
+        html = `<div style="background:#080c18;color:#ff9100;border:2px solid #ff9100;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:900;white-space:nowrap;box-shadow:0 0 15px #ff9100;animation: pulse 1.5s infinite;">🚩 SEKTOR 2 (SPLIT)</div>`;
+        size = 26;
       } else if (corner) {
         const badgeColor = corner.severity === 'hairpin' ? '#ff0033' : corner.severity === 'sharp' ? '#ff9100' : '#00f0ff';
         html = `<div style="background:rgba(0,0,0,0.85);color:${badgeColor};border:1px solid ${badgeColor};border-radius:4px;padding:2px 6px;font-size:10px;font-weight:800;white-space:nowrap;">${corner.label} (${corner.angleDegrees}°)</div>`;
@@ -126,7 +165,17 @@ export default function TrackSetup() {
       }
 
       const icon = L.divIcon({ html, className: '', iconSize: [size, size] });
-      L.marker([pt.lat, pt.lon], { icon }).addTo(layerGroup.current!);
+      const marker = L.marker([pt.lat, pt.lon], { icon, draggable: true }).addTo(layerGroup.current!);
+
+      // Update point position on drag
+      marker.on('dragend', (e: any) => {
+        const newLatLng = e.target.getLatLng();
+        setPath(prev => {
+          const updated = [...prev];
+          updated[idx] = { lat: newLatLng.lat, lon: newLatLng.lng };
+          return updated;
+        });
+      });
     });
   }, [path, s1Index, s2Index, corners]);
 
@@ -188,7 +237,7 @@ export default function TrackSetup() {
           }
         }
 
-        // Accurate snap distance threshold (35 screen pixels)
+        // Snap distance threshold (35 screen pixels)
         if (minDistance < 35) {
           const newLatLng = map.layerPointToLatLng(bestProjectedPt as any);
           const newPath = [...workingPath];
@@ -222,14 +271,42 @@ export default function TrackSetup() {
     };
   }, []);
 
-  const handleSave = async () => {
+  const handleEditTrack = (t: any) => {
+    setEditingTrackId(t._id);
+    setTrackName(t.name);
+    setPath(t.path || []);
+    setS1Index(t.s1Index);
+    setS2Index(t.s2Index);
+    setShowTrackList(false);
+
+    if (leafletMap.current && t.path && t.path.length > 0) {
+      const bounds = L.latLngBounds(t.path.map((p: any) => [p.lat, p.lon]));
+      leafletMap.current.fitBounds(bounds, { padding: [50, 50] });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTrackId(null);
+    setTrackName('');
+    setPath([]);
+    setS1Index(undefined);
+    setS2Index(undefined);
+  };
+
+  const handleSaveOrUpdate = async () => {
     if (path.length < 2) return alert('Trasa musi mieć co najmniej 2 punkty!');
     if (s1Index === undefined || s2Index === undefined) {
       return alert('Trasa musi mieć ustawione oba sektory (S1 i S2) przed zapisem!');
     }
-    await saveTrack({ name: trackName || 'Nowa Trasa', path, s1Index, s2Index });
-    alert('Zapisano pomyślnie!');
-    setPath([]); setS1Index(undefined); setS2Index(undefined); setTrackName('');
+
+    if (editingTrackId) {
+      await updateTrack({ id: editingTrackId as any, name: trackName || 'Zaktualizowana Trasa', path, s1Index, s2Index });
+      alert('Trasa została pomyślnie zaktualizowana!');
+    } else {
+      await saveTrack({ name: trackName || 'Nowa Trasa', path, s1Index, s2Index });
+      alert('Zapisano pomyślnie nową trasę!');
+    }
+    handleCancelEdit();
   };
 
   const handleUndoPoint = () => {
@@ -252,6 +329,7 @@ export default function TrackSetup() {
   const handleDeleteTrack = async (id: any, name: string) => {
     if (window.confirm(`Czy na pewno chcesz usunąć trasę "${name}" wraz ze wszystkimi wynikami?`)) {
       await deleteTrack({ id });
+      if (editingTrackId === id) handleCancelEdit();
     }
   };
 
@@ -270,7 +348,7 @@ export default function TrackSetup() {
         className="glass-panel" 
         style={{
           padding: '18px', zIndex: 1000, position: 'absolute', top: '12px', left: 'clamp(8px, 2.5vw, 16px)',
-          width: 'clamp(270px, 94vw, 360px)', display: 'flex', flexDirection: 'column', gap: '14px',
+          width: 'clamp(280px, 94vw, 380px)', display: 'flex', flexDirection: 'column', gap: '14px',
           maxHeight: 'calc(100vh - 80px)', overflowY: 'auto'
         }}
       >
@@ -278,11 +356,13 @@ export default function TrackSetup() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <span style={{ background: 'var(--f1-red)', color: '#fff', fontSize: '10px', fontWeight: 900, padding: '2px 6px', borderRadius: '4px', transform: 'skew(-10deg)' }}>CAD</span>
-              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px' }}>KREATOR TRAS F1</h2>
+              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px' }}>
+                {editingTrackId ? '✏️ EDYTOR TRASY' : 'KREATOR TRAS F1'}
+              </h2>
             </div>
             {!panelCollapsed && (
               <p style={{ color: 'var(--text-secondary)', fontSize: '11px', marginTop: '4px' }}>
-                Rysuj tor i przypinaj sektory do wyrysowanej linii wyścigowej.
+                {editingTrackId ? 'Modyfikuj punkty, przeciągaj węzły i przesuwaj bramki sektorów.' : 'Rysuj tor i przypinaj sektory do wyrysowanej linii wyścigowej.'}
               </p>
             )}
           </div>
@@ -297,9 +377,16 @@ export default function TrackSetup() {
         
         {!panelCollapsed && (
           <>
+            {editingTrackId && (
+              <div style={{ background: 'rgba(0,240,255,0.15)', border: '1px solid var(--neon-cyan)', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', color: 'var(--neon-cyan)', fontWeight: 800, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>✏️ Tryb Edycji Trasy</span>
+                <button style={{ background: 'transparent', border: 'none', color: '#ff0033', cursor: 'pointer', fontWeight: 900 }} onClick={handleCancelEdit}>✕ Anuluj</button>
+              </div>
+            )}
+
             <input 
               className="custom-input" 
-              placeholder="Nazwa trasa... (np. Szybka Nocna)" 
+              placeholder="Nazwa trasy... (np. Szybka Nocna)" 
               value={trackName} 
               onChange={e => setTrackName(e.target.value)} 
               style={{ fontSize: '14px' }}
@@ -313,6 +400,30 @@ export default function TrackSetup() {
             <span style={{ fontSize: '14px' }}>🗺️</span> {labelsVisible ? 'Ukryj' : 'Pokaż'} Ulice
           </button>
         </div>
+
+        {/* Sector Distance & Percentage Breakdown Card */}
+        {sectorMetrics && (
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(0,240,255,0.2)', fontSize: '11px' }}>
+            <div style={{ fontWeight: 800, color: 'var(--neon-cyan)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>🏁 PODGLĄD SEKTORÓW TRASY</span>
+              <span style={{ background: 'rgba(0,240,255,0.15)', padding: '2px 6px', borderRadius: '4px', color: 'white' }}>{(sectorMetrics.total / 1000).toFixed(2)} km</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+              <div style={{ background: 'rgba(0,240,255,0.1)', padding: '6px', borderRadius: '6px', border: '1px solid rgba(0,240,255,0.3)', textAlign: 'center' }}>
+                <div style={{ color: '#00f0ff', fontWeight: 800 }}>SEKTOR 1</div>
+                <div style={{ color: 'white', fontWeight: 700, fontSize: '12px' }}>{sectorMetrics.s1Len}m</div>
+              </div>
+              <div style={{ background: 'rgba(243,18,60,0.1)', padding: '6px', borderRadius: '6px', border: '1px solid rgba(243,18,60,0.3)', textAlign: 'center' }}>
+                <div style={{ color: '#f3123c', fontWeight: 800 }}>SEKTOR 2</div>
+                <div style={{ color: 'white', fontWeight: 700, fontSize: '12px' }}>{sectorMetrics.s2Len}m</div>
+              </div>
+              <div style={{ background: 'rgba(57,255,20,0.1)', padding: '6px', borderRadius: '6px', border: '1px solid rgba(57,255,20,0.3)', textAlign: 'center' }}>
+                <div style={{ color: '#39ff14', fontWeight: 800 }}>SEKTOR 3</div>
+                <div style={{ color: 'white', fontWeight: 700, fontSize: '12px' }}>{sectorMetrics.s3Len}m</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '2px 0' }} />
 
@@ -328,7 +439,7 @@ export default function TrackSetup() {
               padding: '10px', borderRadius: '10px', textAlign: 'center', color: 'white', fontWeight: 600, fontSize: '13px'
             }}
           >
-            {mode === 'draw' && 'Rysowanie Linii Wyścigowej (Klikaj na mapie)'}
+            {mode === 'draw' && 'Rysowanie Linii (Klikaj na mapie / przeciągaj punkty)'}
             {mode === 's1' && 'Wybieranie Sektora 1 (Kliknij na linię)'}
             {mode === 's2' && 'Wybieranie Sektora 2 (Kliknij na linię)'}
           </motion.div>
@@ -366,7 +477,7 @@ export default function TrackSetup() {
             onClick={() => setMode('s1')}
             disabled={path.length < 3}
           >
-            🏁 Ustaw Sektor 1
+            🏁 Ustaw Sektor 1 {s1Index !== undefined ? `(Punkt #${s1Index})` : ''}
           </button>
 
           <button
@@ -374,17 +485,17 @@ export default function TrackSetup() {
             onClick={() => setMode('s2')}
             disabled={s1Index === undefined}
           >
-            🏁 Ustaw Sektor 2
+            🏁 Ustaw Sektor 2 {s2Index !== undefined ? `(Punkt #${s2Index})` : ''}
           </button>
         </div>
 
         <button
           className="btn-primary"
-          style={{ width: '100%', marginTop: '4px', letterSpacing: '1px', fontSize: '16px' }}
-          onClick={handleSave}
+          style={{ width: '100%', marginTop: '4px', letterSpacing: '1px', fontSize: '15px' }}
+          onClick={handleSaveOrUpdate}
           disabled={path.length < 2 || s1Index === undefined || s2Index === undefined}
         >
-          ZAPISZ TRASĘ
+          {editingTrackId ? '💾 ZAKTUALIZUJ TRASĘ' : 'ZAPISZ TRASĘ'}
         </button>
 
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '4px', paddingTop: '10px' }}>
@@ -397,7 +508,7 @@ export default function TrackSetup() {
           </button>
 
           {showTrackList && (
-            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }}>
+            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
               {tracks.length === 0 ? (
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', padding: '8px' }}>Brak zapisanych tras</div>
               ) : (
@@ -407,13 +518,22 @@ export default function TrackSetup() {
                       <div style={{ fontWeight: 700, fontSize: '13px', color: 'white' }}>{t.name}</div>
                       <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{t.path?.length || 0} punktów</div>
                     </div>
-                    <button
-                      className="btn-danger"
-                      style={{ padding: '4px 8px', fontSize: '11px' }}
-                      onClick={() => handleDeleteTrack(t._id, t.name)}
-                    >
-                      Usuń
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--neon-cyan)' }}
+                        onClick={() => handleEditTrack(t)}
+                      >
+                        ✏️ Edytuj
+                      </button>
+                      <button
+                        className="btn-danger"
+                        style={{ padding: '4px 8px', fontSize: '11px' }}
+                        onClick={() => handleDeleteTrack(t._id, t.name)}
+                      >
+                        Usuń
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
