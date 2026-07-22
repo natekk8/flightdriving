@@ -21,6 +21,7 @@ export const update = mutation({
     speed: v.number(),
     heading: v.optional(v.number()),
     gForce: v.optional(v.number()),
+    leanAngle: v.optional(v.number()),
     timestamp: v.optional(v.number()),
   },
   handler: async (ctx, args) => {

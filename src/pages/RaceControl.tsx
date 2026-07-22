@@ -713,6 +713,24 @@ export default function RaceControl() {
                     <span style={{ color: 'var(--neon-cyan)' }}>{driverBLap?.topSpeed ? Math.round(driverBLap.topSpeed) : '--'} km/h</span>
                   </div>
                 </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: '10px', color: '#888' }}>POCHYLENIE (LEAN)</div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'white' }}>
+                    <span style={{ color: 'var(--neon-green)' }}>{driverALap?.maxLeanAngle ? `${Math.round(driverALap.maxLeanAngle)}°` : '--°'}</span>
+                    <span style={{ color: '#666', margin: '0 4px' }}>vs</span>
+                    <span style={{ color: 'var(--neon-cyan)' }}>{driverBLap?.maxLeanAngle ? `${Math.round(driverBLap.maxLeanAngle)}°` : '--°'}</span>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: '10px', color: '#888' }}>MAKS. G-FORCE</div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, marginTop: '2px', color: 'white' }}>
+                    <span style={{ color: 'var(--neon-green)' }}>{driverALap?.maxGForce ? `${driverALap.maxGForce}G` : '--G'}</span>
+                    <span style={{ color: '#666', margin: '0 4px' }}>vs</span>
+                    <span style={{ color: 'var(--neon-cyan)' }}>{driverBLap?.maxGForce ? `${driverBLap.maxGForce}G` : '--G'}</span>
+                  </div>
+                </div>
               </div>
             )}
           </motion.div>

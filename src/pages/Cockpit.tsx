@@ -369,7 +369,9 @@ export default function Cockpit() {
             driverName, vehicleType, trackId: track._id,
             lat: currentPoint.lat, lon: currentPoint.lon,
             speed: speedKmh, heading: lastHeadingRef.current,
-            gForce: gForceRef.current, timestamp: rawTime,
+            gForce: gForceRef.current,
+            leanAngle: Math.round(smoothLeanRef.current || 0),
+            timestamp: rawTime,
           }).catch(console.error);
         }
 
