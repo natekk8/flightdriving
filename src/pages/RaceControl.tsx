@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
 import L from 'leaflet';
@@ -30,6 +30,12 @@ export default function RaceControl() {
   
   const seenDriversRef = useRef<Set<string>>(new Set());
   
+  // @ts-ignore
+  const resequenceLapsMutation = useMutation(api.laps.resequenceLaps);
+  useEffect(() => {
+    resequenceLapsMutation().catch(console.error);
+  }, []);
+
   // @ts-ignore
   const rawTracks = useQuery(api.tracks.getTracks);
   const tracks = useMemo(() => rawTracks ?? [], [rawTracks]);
@@ -235,12 +241,16 @@ export default function RaceControl() {
     return Array.from(driverMap.values());
   }, [sortedLaps]);
 
-  // Filter laps for the selected driver in Training Mode
+  // Filter laps for the selected driver in Training Mode sorted chronologically (earliest lap first)
   const driverLaps = useMemo(() => {
     if (!trainingDriver) return [];
-    return laps
-      .filter((l: any) => l.driverName === trainingDriver)
-      .sort((a: any, b: any) => (a.lapNumber || 0) - (b.lapNumber || 0));
+    const list = laps.filter((l: any) => l.driverName === trainingDriver);
+    list.sort((a: any, b: any) => {
+      const timeA = a.timestamp || a._creationTime || 0;
+      const timeB = b.timestamp || b._creationTime || 0;
+      return timeA - timeB;
+    });
+    return list;
   }, [laps, trainingDriver]);
 
   useEffect(() => {

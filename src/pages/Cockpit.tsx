@@ -102,6 +102,16 @@ export default function Cockpit() {
     bestLapRef.current = laps.length > 0 ? [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime)[0] : null;
   }, [laps]);
 
+  const myLapsCount = useMemo(() => {
+    return laps.filter((l: any) => l.driverName === driverName).length;
+  }, [laps, driverName]);
+
+  useEffect(() => {
+    if (myLapsCount > 0) {
+      lapNumberRef.current = myLapsCount + 1;
+    }
+  }, [myLapsCount]);
+
   const sectorStats = useMemo(() => {
     const allS1 = laps.map((l: any) => l.s1).filter((v: any): v is number => typeof v === 'number' && v > 0);
     const allS2 = laps.map((l: any) => l.s2).filter((v: any): v is number => typeof v === 'number' && v > 0);
