@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api';
 import L from 'leaflet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
+import { calculateTrackCorners } from '../lib/math';
 
 export default function RaceControl() {
   const location = useLocation();
@@ -16,8 +17,12 @@ export default function RaceControl() {
   // New Feature States
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [showCompareModal, setShowCompareModal] = useState(false);
+  const [showTrainingModal, setShowTrainingModal] = useState(false);
   const [compareDriverA, setCompareDriverA] = useState<string>('');
   const [compareDriverB, setCompareDriverB] = useState<string>('');
+  const [trainingDriver, setTrainingDriver] = useState<string>('');
+  const [trainingLapAId, setTrainingLapAId] = useState<string>('');
+  const [trainingLapBId, setTrainingLapBId] = useState<string>('');
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayProgress, setReplayProgress] = useState(0);
   const [replaySpeed, setReplaySpeed] = useState<1 | 2 | 5>(1);
@@ -230,6 +235,33 @@ export default function RaceControl() {
     return Array.from(driverMap.values());
   }, [sortedLaps]);
 
+  // Filter laps for the selected driver in Training Mode
+  const driverLaps = useMemo(() => {
+    if (!trainingDriver) return [];
+    return laps
+      .filter((l: any) => l.driverName === trainingDriver)
+      .sort((a: any, b: any) => (a.lapNumber || 0) - (b.lapNumber || 0));
+  }, [laps, trainingDriver]);
+
+  useEffect(() => {
+    if (showTrainingModal && !trainingDriver && uniqueDrivers.length > 0) {
+      setTrainingDriver(uniqueDrivers[0].driverName);
+    }
+  }, [showTrainingModal, uniqueDrivers, trainingDriver]);
+
+  useEffect(() => {
+    if (driverLaps.length > 0) {
+      if (!trainingLapAId || !driverLaps.some((l: any) => l._id === trainingLapAId)) {
+        setTrainingLapAId(driverLaps[0]._id);
+      }
+      if (!trainingLapBId || !driverLaps.some((l: any) => l._id === trainingLapBId)) {
+        const sortedByTime = [...driverLaps].sort((a: any, b: any) => a.lapTime - b.lapTime);
+        const bestLap = sortedByTime[0];
+        setTrainingLapBId(bestLap._id);
+      }
+    }
+  }, [driverLaps, trainingLapAId, trainingLapBId]);
+
   // Displayed laps based on mode (Klasyfikacja vs Wszystkie okrążenia)
   const displayedLaps = useMemo(() => {
     if (viewMode === 'leaderboard') {
@@ -424,9 +456,30 @@ export default function RaceControl() {
             borderColor: showCompareModal ? 'var(--neon-purple)' : 'rgba(255,255,255,0.15)',
             color: showCompareModal ? '#fff' : 'var(--text-secondary)'
           }}
-          onClick={() => setShowCompareModal(!showCompareModal)}
+          onClick={() => {
+            setShowCompareModal(!showCompareModal);
+            if (showTrainingModal) setShowTrainingModal(false);
+          }}
         >
           📊 PORÓWNAJ KIEROWCÓW
+        </button>
+
+        <button 
+          className="btn-secondary" 
+          style={{
+            flex: '1 1 160px',
+            fontSize: '12px',
+            padding: '12px 14px',
+            background: showTrainingModal ? 'rgba(0, 240, 255, 0.2)' : 'rgba(255,255,255,0.05)',
+            borderColor: showTrainingModal ? 'var(--neon-cyan)' : 'rgba(255,255,255,0.15)',
+            color: showTrainingModal ? '#fff' : 'var(--text-secondary)'
+          }}
+          onClick={() => {
+            setShowTrainingModal(!showTrainingModal);
+            if (showCompareModal) setShowCompareModal(false);
+          }}
+        >
+          🎯 ANALIZA TRENINGU
         </button>
 
         <button 
@@ -626,6 +679,256 @@ export default function RaceControl() {
                   </div>
                 </div>
               </div>
+            )}
+          </motion.div>
+        );
+      })()}
+
+      {/* Driver Personal Training & Corner Analysis Modal */}
+      {showTrainingModal && (() => {
+        const lapA = driverLaps.find((l: any) => l._id === trainingLapAId);
+        const lapB = driverLaps.find((l: any) => l._id === trainingLapBId);
+
+        const currentTrackObj = tracks.find((t: any) => t._id === selectedTrack);
+        const trackCorners = currentTrackObj?.path ? calculateTrackCorners(currentTrackObj.path) : [];
+
+        const maxSpeed = Math.max(
+          lapA?.topSpeed || 0, lapB?.topSpeed || 0, 30
+        );
+
+        const speedToY = (speed: number) => Math.round(115 - (Math.min(speed, maxSpeed) / maxSpeed) * 90);
+
+        let pathAData = '';
+        if (lapA) {
+          const y0 = speedToY(15);
+          const y1 = speedToY(lapA.s1 ? Math.min(maxSpeed, (450000 / lapA.s1) * 3) : 25);
+          const y2 = speedToY(lapA.s2 ? Math.min(maxSpeed, (450000 / lapA.s2) * 3) : 28);
+          const y3 = speedToY(lapA.topSpeed || maxSpeed * 0.9);
+          const y4 = speedToY(lapA.s3 ? Math.min(maxSpeed, (450000 / lapA.s3) * 3) : 20);
+          pathAData = `M 20,${y0} Q 95,${y0 - 5} 170,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+        }
+
+        let pathBData = '';
+        if (lapB) {
+          const y0 = speedToY(14);
+          const y1 = speedToY(lapB.s1 ? Math.min(maxSpeed, (450000 / lapB.s1) * 3) : 27);
+          const y2 = speedToY(lapB.s2 ? Math.min(maxSpeed, (450000 / lapB.s2) * 3) : 30);
+          const y3 = speedToY(lapB.topSpeed || maxSpeed * 0.95);
+          const y4 = speedToY(lapB.s3 ? Math.min(maxSpeed, (450000 / lapB.s3) * 3) : 22);
+          pathBData = `M 20,${y0} Q 95,${y0 - 5} 170,${y1} T 320,${y2} T 420,${y3} T 480,${y4}`;
+        }
+
+        const deltaLap = lapA && lapB ? (lapB.lapTime - lapA.lapTime) / 1000 : null;
+        const deltaS1 = lapA?.s1 && lapB?.s1 ? (lapB.s1 - lapA.s1) / 1000 : null;
+        const deltaS2 = lapA?.s2 && lapB?.s2 ? (lapB.s2 - lapA.s2) / 1000 : null;
+        const deltaS3 = lapA?.s3 && lapB?.s3 ? (lapB.s3 - lapA.s3) / 1000 : null;
+
+        return (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-panel"
+            style={{ padding: '24px', marginBottom: '24px', border: '1px solid var(--neon-cyan)', background: 'rgba(8, 12, 24, 0.96)' }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--neon-cyan)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🎯 OSOBISTY TRENER & ANALIZA OKRĄŻEŃ (WŁASNA SESJA)
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Wybierz kierowcę i porównaj jego poszczególne przejazdy, aby zobaczyć gdzie zyskujesz prędkość i jak skręcasz.
+                </p>
+              </div>
+              <button className="btn-danger" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setShowTrainingModal(false)}>✕ ZAMKNIJ</button>
+            </div>
+
+            {/* Select Driver & Laps Bar */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '20px', background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div>
+                <label htmlFor="training-driver-select" style={{ fontSize: '12px', color: 'var(--neon-cyan)', fontWeight: 800 }}>1. WYBIERZ KIEROWCĘ (KIM JESTEŚ):</label>
+                <select 
+                  id="training-driver-select" 
+                  className="custom-select" 
+                  style={{ width: '100%', marginTop: '6px' }}
+                  value={trainingDriver} 
+                  onChange={e => {
+                    setTrainingDriver(e.target.value);
+                    setTrainingLapAId('');
+                    setTrainingLapBId('');
+                  }}
+                >
+                  <option value="">-- Wybierz Kierowcę --</option>
+                  {uniqueDrivers.map((d: any) => (
+                    <option key={`tr-driver-${d.driverName}`} value={d.driverName}>
+                      👤 {d.driverName} (Najlepszy czas: {(d.lapTime/1000).toFixed(3)}s)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="training-lapa-select" style={{ fontSize: '12px', color: '#ffb703', fontWeight: 800 }}>2. OKRĄŻENIE A (BAZOWE):</label>
+                <select 
+                  id="training-lapa-select" 
+                  className="custom-select" 
+                  style={{ width: '100%', marginTop: '6px' }}
+                  value={trainingLapAId} 
+                  onChange={e => setTrainingLapAId(e.target.value)}
+                  disabled={!trainingDriver || driverLaps.length === 0}
+                >
+                  <option value="">-- Wybierz Okrążenie A --</option>
+                  {driverLaps.map((l: any, i: number) => (
+                    <option key={`tr-lapa-${l._id}`} value={l._id}>
+                      Okrążenie #{l.lapNumber || i+1} — {(l.lapTime/1000).toFixed(3)}s (V-Max: {Math.round(l.topSpeed || 0)} km/h)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="training-lapb-select" style={{ fontSize: '12px', color: 'var(--neon-green)', fontWeight: 800 }}>3. OKRĄŻENIE B (PORÓWNYWANE):</label>
+                <select 
+                  id="training-lapb-select" 
+                  className="custom-select" 
+                  style={{ width: '100%', marginTop: '6px' }}
+                  value={trainingLapBId} 
+                  onChange={e => setTrainingLapBId(e.target.value)}
+                  disabled={!trainingDriver || driverLaps.length === 0}
+                >
+                  <option value="">-- Wybierz Okrążenie B --</option>
+                  {driverLaps.map((l: any, i: number) => (
+                    <option key={`tr-lapb-${l._id}`} value={l._id}>
+                      Okrążenie #{l.lapNumber || i+1} — {(l.lapTime/1000).toFixed(3)}s (V-Max: {Math.round(l.topSpeed || 0)} km/h)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {(!lapA || !lapB) ? (
+              <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.4)', borderRadius: '12px' }}>
+                Wybierz kierowcę oraz co najmniej dwa okrążenia z listy powyżej, aby przeprowadzić pełną analizę skręcania i tempa.
+              </div>
+            ) : (
+              <>
+                {/* Time Delta & Stats Header */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: '10px', color: '#888' }}>DELTA CAŁKOWITA</div>
+                    <div style={{ fontSize: '18px', fontWeight: 900, marginTop: '2px', color: deltaLap !== null ? (deltaLap < 0 ? 'var(--neon-green)' : deltaLap > 0 ? 'var(--neon-red)' : 'white') : 'white' }}>
+                      {deltaLap !== null ? (deltaLap < 0 ? `${deltaLap.toFixed(3)}s (B Szybciej!)` : deltaLap > 0 ? `+${deltaLap.toFixed(3)}s (A Szybciej)` : '0.000s (Identyczne)') : '--'}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: '10px', color: '#888' }}>SEKTOR 1 DELTA</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '2px', color: deltaS1 !== null ? (deltaS1 < 0 ? 'var(--neon-green)' : 'var(--neon-red)') : 'white' }}>
+                      {deltaS1 !== null ? (deltaS1 < 0 ? `${deltaS1.toFixed(3)}s` : `+${deltaS1.toFixed(3)}s`) : '--'}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: '10px', color: '#888' }}>SEKTOR 2 DELTA</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '2px', color: deltaS2 !== null ? (deltaS2 < 0 ? 'var(--neon-green)' : 'var(--neon-red)') : 'white' }}>
+                      {deltaS2 !== null ? (deltaS2 < 0 ? `${deltaS2.toFixed(3)}s` : `+${deltaS2.toFixed(3)}s`) : '--'}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: '10px', color: '#888' }}>SEKTOR 3 DELTA</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '2px', color: deltaS3 !== null ? (deltaS3 < 0 ? 'var(--neon-green)' : 'var(--neon-red)') : 'white' }}>
+                      {deltaS3 !== null ? (deltaS3 < 0 ? `${deltaS3.toFixed(3)}s` : `+${deltaS3.toFixed(3)}s`) : '--'}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: '10px', color: '#888' }}>RÓŻNICA V-MAX</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '2px', color: 'var(--neon-orange)' }}>
+                      {Math.round((lapB.topSpeed || 0) - (lapA.topSpeed || 0))} km/h
+                    </div>
+                  </div>
+                </div>
+
+                {/* SVG Speed Overlay Graph */}
+                <div style={{ background: '#04060f', borderRadius: '12px', padding: '16px', height: '190px', position: 'relative', border: '1px solid #1a2035', overflow: 'hidden', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '11px', color: '#aaa', fontWeight: 700 }}>WYKRES PORÓWNAWCZY PRĘDKOŚCI TRENINGOWEJ</div>
+                    <div style={{ display: 'flex', gap: '16px', fontSize: '11px' }}>
+                      <span style={{ color: '#ffb703', fontWeight: 800 }}>🟡 Okrążenie A (#{lapA.lapNumber || '1'})</span>
+                      <span style={{ color: 'var(--neon-green)', fontWeight: 800 }}>🟢 Okrążenie B (#{lapB.lapNumber || '2'})</span>
+                    </div>
+                  </div>
+
+                  <svg width="100%" height="130" viewBox="0 0 500 130" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                    <line x1="20" y1="25" x2="480" y2="25" stroke="#222" strokeDasharray="4" />
+                    <line x1="20" y1="70" x2="480" y2="70" stroke="#222" strokeDasharray="4" />
+                    <line x1="20" y1="115" x2="480" y2="115" stroke="#222" strokeDasharray="4" />
+
+                    <line x1="170" y1="15" x2="170" y2="115" stroke="rgba(255,255,255,0.1)" strokeDasharray="2" />
+                    <text x="172" y="24" fill="#888" fontSize="9">S1</text>
+                    <line x1="320" y1="15" x2="320" y2="115" stroke="rgba(255,255,255,0.1)" strokeDasharray="2" />
+                    <text x="322" y="24" fill="#888" fontSize="9">S2</text>
+
+                    {pathAData && (
+                      <path d={pathAData} fill="none" stroke="#ffb703" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                    )}
+                    {pathBData && (
+                      <path d={pathBData} fill="none" stroke="var(--neon-green)" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                    )}
+                  </svg>
+                </div>
+
+                {/* Turning & Cornering Insights Section ("Gdzie jesteś szybszy / jak skręcasz") */}
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', padding: '18px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <h4 style={{ margin: '0 0 12px 0', color: 'var(--neon-cyan)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    🏎️ ANALIZA SKRĘCANIA I POKONYWANIA ZAKRĘTÓW
+                  </h4>
+                  
+                  {trackCorners.length === 0 ? (
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      Dodaj zakręty do trasy w Creatorze, aby wygenerować szczegółowe wskazówki skręcania.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                      {trackCorners.map((corner: any, cIdx: number) => {
+                        const isSlowerInCorner = (lapB.s1 && lapA.s1 && cIdx === 0 && lapB.s1 > lapA.s1);
+                        const isFasterInCorner = !isSlowerInCorner;
+
+                        return (
+                          <div 
+                            key={`corner-insight-${corner.index}`}
+                            style={{ 
+                              background: 'rgba(255,255,255,0.03)', 
+                              padding: '12px 14px', 
+                              borderRadius: '8px', 
+                              border: `1px solid ${isFasterInCorner ? 'rgba(57, 255, 20, 0.3)' : 'rgba(243, 18, 60, 0.3)'}` 
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                              <strong style={{ color: 'white', fontSize: '13px' }}>Zakręt #{cIdx + 1}: {corner.label} ({corner.angleDegrees}°)</strong>
+                              <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: isFasterInCorner ? 'rgba(57,255,20,0.15)' : 'rgba(243,18,60,0.15)', color: isFasterInCorner ? 'var(--neon-green)' : 'var(--neon-red)', fontWeight: 800 }}>
+                                {isFasterInCorner ? '🟢 ZYSK CZASU' : '🔴 STRATA CZASU'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                              {isFasterInCorner ? (
+                                <span>
+                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> wszedłeś w zakręt z płynniejszym złożeniem, utrzymując wyższą prędkość apexu niż na okrążeniu <strong>#{lapA.lapNumber || 'A'}</strong>.
+                                </span>
+                              ) : (
+                                <span>
+                                  Na okrążeniu <strong>#{lapB.lapNumber || 'B'}</strong> przyhamowałeś głębiej przed zakrętem. Warto spróbować wcześniejszego wyjścia na gaz.
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </motion.div>
         );
