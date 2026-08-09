@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as laps from "../laps.js";
 import type * as telemetry from "../telemetry.js";
 import type * as tracks from "../tracks.js";
@@ -19,6 +20,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   laps: typeof laps;
   telemetry: typeof telemetry;
   tracks: typeof tracks;

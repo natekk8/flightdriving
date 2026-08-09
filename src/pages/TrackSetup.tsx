@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api';
 import { calculateTrackCorners } from '../lib/math';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet-rotate';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type Point = { lat: number; lon: number };
@@ -34,7 +35,6 @@ export default function TrackSetup() {
   const [s2Index, setS2Index] = useState<number | undefined>();
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [mode, setMode] = useState<'draw' | 's1' | 's2'>('draw');
-  const [labelsVisible, setLabelsVisible] = useState(true);
   const [showTrackList, setShowTrackList] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
 
@@ -51,7 +51,6 @@ export default function TrackSetup() {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
   const layerGroup = useRef<L.LayerGroup | null>(null);
-  const labelsLayer = useRef<L.TileLayer | null>(null);
 
   const modeRef = useRef(mode);
   const pathRef = useRef(path);
@@ -87,18 +86,15 @@ export default function TrackSetup() {
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
     
-    leafletMap.current = L.map(mapRef.current, { zoomControl: false, maxBoundsViscosity: 1.0 }).setView([51.95, 20.15], 13);
+    // @ts-ignore
+    leafletMap.current = L.map(mapRef.current, { zoomControl: false, maxBoundsViscosity: 1.0, rotate: true, touchRotate: true }).setView([51.95, 20.15], 13);
     
-    // Satellite Map Darkened for OLED look
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
-      attribution: 'Tiles &copy; Esri',
+    // Google Maps Hybrid
+    L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=pl&x={x}&y={y}&z={z}', {
+      maxZoom: 24,
+      maxNativeZoom: 21,
       className: 'map-tiles-dark'
     }).addTo(leafletMap.current);
-
-    labelsLayer.current = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19
-    });
 
     layerGroup.current = L.layerGroup().addTo(leafletMap.current);
 
@@ -108,14 +104,7 @@ export default function TrackSetup() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!leafletMap.current || !labelsLayer.current) return;
-    if (labelsVisible) {
-      if (!leafletMap.current.hasLayer(labelsLayer.current)) leafletMap.current.addLayer(labelsLayer.current);
-    } else {
-      if (leafletMap.current.hasLayer(labelsLayer.current)) leafletMap.current.removeLayer(labelsLayer.current);
-    }
-  }, [labelsVisible]);
+  // Removed labelsLayer since Google Hybrid has labels
 
   // Render Polylines, Markers, Draggable Nodes & Corner Badges
   useEffect(() => {
@@ -166,6 +155,16 @@ export default function TrackSetup() {
 
       const icon = L.divIcon({ html, className: '', iconSize: [size, size] });
       const marker = L.marker([pt.lat, pt.lon], { icon, draggable: true }).addTo(layerGroup.current!);
+
+      if (isStart && path.length > 2) {
+        marker.on('click', () => {
+          if (modeRef.current === 'draw') {
+            if (window.confirm('Zamknąć pętlę trasy (meta na linii startu)?')) {
+              setPath(prev => [...prev, { lat: prev[0].lat, lon: prev[0].lon }]);
+            }
+          }
+        });
+      }
 
       // Update point position on drag
       marker.on('dragend', (e: any) => {
@@ -400,9 +399,6 @@ export default function TrackSetup() {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn-secondary" style={{ flex: 1, fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleLocate}>
             <span style={{ fontSize: '14px' }}>📍</span> GPS
-          </button>
-          <button className="btn-secondary" style={{ flex: 1, fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={() => setLabelsVisible(!labelsVisible)}>
-            <span style={{ fontSize: '14px' }}>🗺️</span> {labelsVisible ? 'Ukryj' : 'Pokaż'} Ulice
           </button>
         </div>
 

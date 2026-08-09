@@ -7,6 +7,7 @@ import { requestWakeLock, releaseWakeLock } from '../lib/wakelock';
 import { queueLap, flushLapQueue, getQueuedLapCount } from '../lib/offlineQueue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet-rotate';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { TelemetryEngine } from '../lib/TelemetryEngine';
@@ -362,10 +363,12 @@ export default function Cockpit() {
       const track = tracks.find((t: any) => t._id === selectedTrack);
       const startPt = track?.path?.[0] || { lat: 51.95, lon: 20.15 };
       
-      leafletMap.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView([startPt.lat, startPt.lon], 18);
+      // @ts-ignore
+      leafletMap.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false, rotate: true, touchRotate: true }).setView([startPt.lat, startPt.lon], 18);
       
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19
+      L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=pl&x={x}&y={y}&z={z}', {
+        maxZoom: 24,
+        maxNativeZoom: 21,
       }).addTo(leafletMap.current);
 
       if (track?.path) {

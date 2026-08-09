@@ -3,6 +3,7 @@ import { useQuery, useMutation } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
 import L from 'leaflet';
+import 'leaflet-rotate';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 import { calculateTrackCorners } from '../lib/math';
@@ -102,11 +103,12 @@ export default function RaceControl() {
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
     
-    leafletMap.current = L.map(mapRef.current, { zoomControl: false }).setView([51.95, 20.15], 14);
+    // @ts-ignore
+    leafletMap.current = L.map(mapRef.current, { zoomControl: false, rotate: true, touchRotate: true }).setView([51.95, 20.15], 14);
     
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
-      attribution: 'Tiles &copy; Esri',
+    L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=pl&x={x}&y={y}&z={z}', {
+      maxZoom: 24,
+      maxNativeZoom: 21,
       className: 'map-tiles-dark'
     }).addTo(leafletMap.current);
 
@@ -194,13 +196,12 @@ export default function RaceControl() {
     }
 
     if (!focusLeafletMap.current) {
-      focusLeafletMap.current = L.map(focusMapRef.current, { zoomControl: false }).setView([51.95, 20.15], 18);
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19,
+      // @ts-ignore
+      focusLeafletMap.current = L.map(focusMapRef.current, { zoomControl: false, rotate: true, touchRotate: true }).setView([51.95, 20.15], 18);
+      L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=pl&x={x}&y={y}&z={z}', {
+        maxZoom: 24,
+        maxNativeZoom: 21,
         className: 'map-tiles-dark'
-      }).addTo(focusLeafletMap.current);
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19
       }).addTo(focusLeafletMap.current);
       
       const html = `<div style="width:20px;height:20px;background:var(--neon-green);border-radius:50%;border:3px solid white;box-shadow:0 0 15px var(--neon-green);"></div>`;
