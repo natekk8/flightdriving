@@ -203,14 +203,16 @@ export default function TrackSetup() {
           : currentPath;
 
         const map = leafletMap.current!;
-        const clickPt = map.latLngToLayerPoint(e.latlng);
-        let minDistance = Infinity;
+        const zoom = map.getMaxZoom() || 19;
+        const clickPt = map.project(e.latlng, zoom);
+        
+        let minDistanceMeters = Infinity;
         let bestSegmentIndex = -1;
-        let bestProjectedPt: any = clickPt;
+        let bestProjectedPt: L.Point = clickPt;
 
         for (let i = 0; i < workingPath.length - 1; i++) {
-          const p1 = map.latLngToLayerPoint(L.latLng(workingPath[i].lat, workingPath[i].lon));
-          const p2 = map.latLngToLayerPoint(L.latLng(workingPath[i + 1].lat, workingPath[i + 1].lon));
+          const p1 = map.project(L.latLng(workingPath[i].lat, workingPath[i].lon), zoom);
+          const p2 = map.project(L.latLng(workingPath[i + 1].lat, workingPath[i + 1].lon), zoom);
           
           const v = { x: p2.x - p1.x, y: p2.y - p1.y };
           const w = { x: clickPt.x - p1.x, y: clickPt.y - p1.y };
@@ -225,21 +227,24 @@ export default function TrackSetup() {
             projPt = p2;
           } else {
             const b = c1 / c2;
-            projPt = { x: p1.x + b * v.x, y: p1.y + b * v.y };
+            projPt = L.point(p1.x + b * v.x, p1.y + b * v.y);
           }
           
-          const dist = Math.sqrt(Math.pow(clickPt.x - projPt.x, 2) + Math.pow(clickPt.y - projPt.y, 2));
+          // Distance in projected units (roughly meters at equator, but good enough for local scale)
+          // To get real meters, we can unproject and use haversine
+          const projLatLng = map.unproject(projPt as L.Point, zoom);
+          const distMeters = haversineMeters({ lat: e.latlng.lat, lon: e.latlng.lng }, { lat: projLatLng.lat, lon: projLatLng.lng });
           
-          if (dist < minDistance) {
-            minDistance = dist;
+          if (distMeters < minDistanceMeters) {
+            minDistanceMeters = distMeters;
             bestSegmentIndex = i;
-            bestProjectedPt = projPt;
+            bestProjectedPt = projPt as L.Point;
           }
         }
 
-        // Snap distance threshold (35 screen pixels)
-        if (minDistance < 35) {
-          const newLatLng = map.layerPointToLatLng(bestProjectedPt as any);
+        // Snap distance threshold (25 meters real-world distance)
+        if (minDistanceMeters < 25) {
+          const newLatLng = map.unproject(bestProjectedPt, zoom);
           const newPath = [...workingPath];
           newPath.splice(bestSegmentIndex + 1, 0, { lat: newLatLng.lat, lon: newLatLng.lng });
           const newIndex = bestSegmentIndex + 1;

@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
-import { checkLineIntersection, generateGateLine, GPSKalmanFilter, interpolateSubPoints, getDynamicGateWidth, calculateTrackProgress } from '../lib/math';
 import { initAudio, playF1StartBeep, playLapFinishBeep } from '../lib/audio';
 import { requestWakeLock, releaseWakeLock } from '../lib/wakelock';
 import { queueLap, flushLapQueue, getQueuedLapCount } from '../lib/offlineQueue';
@@ -10,15 +9,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-
-type Point = { lat: number; lon: number };
-
-// Ignore GPS fixes worse than this (meters) for lap/sector gate detection -
-// a poor fix can otherwise register a false gate crossing.
-const MAX_GPS_ACCURACY_METERS = 25;
-// Minimum time between two detections of the *same* gate, to avoid GPS
-// jitter re-triggering the gate crossing twice in a row.
-const MIN_GATE_REARM_MS = 2000;
+import { TelemetryEngine } from '../lib/TelemetryEngine';
 
 export default function Cockpit() {
   const navigate = useNavigate();
@@ -32,26 +23,9 @@ export default function Cockpit() {
   const [errorName, setErrorName] = useState(false);
   const [errorTrack, setErrorTrack] = useState(false);
   const [trackConfigError, setTrackConfigError] = useState<string | null>(null);
-  // GPS permission/availability error shown to the driver
   const [gpsError, setGpsError] = useState<string | null>(null);
 
-  // Real-time state (avoids React re-renders via refs)
-  const speedRef = useRef(0);
-  const maxSpeedRef = useRef(0);
-  const deltaRef = useRef<number | null>(null);
-  const liveGhostDeltaRef = useRef<number | null>(null);
-  const gForceRef = useRef(0);
-  const leanAngleRef = useRef(0);
-  const smoothLeanRef = useRef(0);
-  const currentLapMaxLeanRef = useRef(0);
-  const currentLapMaxGRef = useRef(0);
-  const hasMotionEventRef = useRef(false);
-  const lastHeadingRef = useRef(0);
   const [leanAngleDisplay, setLeanAngleDisplay] = useState(0);
-  const lapStartTimeRef = useRef<number | null>(null);
-  const lapNumberRef = useRef<number>(1);
-  const timeOffsetRef = useRef<number>(0);
-  const lapStartTimeLocalRef = useRef<number | null>(null);
 
   // Timing state
   const [s1Time, setS1Time] = useState<number | null>(null);
@@ -65,15 +39,10 @@ export default function Cockpit() {
   const gForceBarRef = useRef<HTMLDivElement>(null);
   const liveTimerRef = useRef<HTMLDivElement>(null);
 
-  const watchIdRef = useRef<number | null>(null);
-  const motionHandlerRef = useRef<any>(null);
-  const orientationHandlerRef = useRef<any>(null);
+  const engineRef = useRef<TelemetryEngine | null>(null);
 
-
-  // Laps that failed to sync to Convex and are waiting to be resent
   const [pendingLapCount, setPendingLapCount] = useState(0);
 
-  // "Hold to confirm" state for the ZAKOŃCZ (exit race) button
   const [exitHoldProgress, setExitHoldProgress] = useState(0);
   const exitHoldStartRef = useRef<number | null>(null);
   const exitHoldRafRef = useRef<number | null>(null);
@@ -107,12 +76,6 @@ export default function Cockpit() {
   const myLapsCount = useMemo(() => {
     return laps.filter((l: any) => l.driverName === driverName).length;
   }, [laps, driverName]);
-
-  useEffect(() => {
-    if (myLapsCount > 0) {
-      lapNumberRef.current = myLapsCount + 1;
-    }
-  }, [myLapsCount]);
 
   const sectorStats = useMemo(() => {
     const allS1 = laps.map((l: any) => l.s1).filter((v: any): v is number => typeof v === 'number' && v > 0);
@@ -182,93 +145,64 @@ export default function Cockpit() {
     initAudio();
     await requestWakeLock();
     
-    // Start GPS tracking early so connection is live and verified
-    startGPS();
-
-    setPhase('f1_lights');
-    setIsLightsOut(false);
-    
-    setS1Time(null); setS2Time(null); setS3Time(null);
-    maxSpeedRef.current = 0;
-    lapStartTimeRef.current = null;
-    lapStartTimeLocalRef.current = null;
-    lapNumberRef.current = 1;
-    
     if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
       try { await (DeviceMotionEvent as any).requestPermission(); } catch (e) { console.error(e); }
     }
     if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
       try { await (DeviceOrientationEvent as any).requestPermission(); } catch (e) { console.error(e); }
     }
+
+    engineRef.current = new TelemetryEngine();
     
-    motionHandlerRef.current = (e: DeviceMotionEvent) => {
-      const ag = e.accelerationIncludingGravity;
-      if (ag && (ag.x !== null || ag.y !== null || ag.z !== null)) {
-        hasMotionEventRef.current = true;
-        const agx = ag.x || 0;
-        const agy = ag.y || 0;
-        const agz = ag.z || 0;
-
-        // Calculate G-force
-        const linAcc = e.acceleration;
-        if (linAcc && (linAcc.x !== null || linAcc.y !== null)) {
-          const lx = linAcc.x || 0;
-          const ly = linAcc.y || 0;
-          gForceRef.current = Math.sqrt(lx * lx + ly * ly) / 9.81;
-        } else {
-          const gTotal = Math.sqrt(agx * agx + agy * agy + agz * agz) / 9.81;
-          gForceRef.current = Math.max(0, gTotal - 1.0);
-        }
-
-        if (gForceRef.current > currentLapMaxGRef.current) {
-          currentLapMaxGRef.current = gForceRef.current;
-        }
-
-        // Calculate Lean Angle (Roll) for Portrait Upright / Tilted Phone Mount (Scooter/Bike):
-        // agx is lateral acceleration (-left, +right)
-        // norm = sqrt(agy^2 + agz^2) is vertical norm, making lean angle invariant to forward pitch tilt!
-        const norm = Math.sqrt(agy * agy + agz * agz);
-        if (norm > 0.5) {
-          const rawLean = (Math.atan2(-agx, norm) * 180) / Math.PI;
-          smoothLeanRef.current = smoothLeanRef.current * 0.7 + rawLean * 0.3;
-          const roundedLean = Math.round(smoothLeanRef.current);
-          leanAngleRef.current = roundedLean;
-          setLeanAngleDisplay(roundedLean);
-
-          if (Math.abs(roundedLean) > currentLapMaxLeanRef.current) {
-            currentLapMaxLeanRef.current = Math.abs(roundedLean);
-          }
-        }
-      } else {
-        const x = e.acceleration?.x || 0;
-        const y = e.acceleration?.y || 0;
-        gForceRef.current = Math.sqrt(x * x + y * y) / 9.81;
-        if (gForceRef.current > currentLapMaxGRef.current) {
-          currentLapMaxGRef.current = gForceRef.current;
-        }
-      }
+    engineRef.current.onSector = (sectorIndex, time) => {
+        if (sectorIndex === 1) setS1Time(time);
+        if (sectorIndex === 2) setS2Time(time);
     };
-    window.addEventListener('devicemotion', motionHandlerRef.current);
-
-    orientationHandlerRef.current = (e: DeviceOrientationEvent) => {
-      if (hasMotionEventRef.current) return;
-      const beta = e.beta || 0;
-      const gamma = e.gamma || 0;
-
-      let lean = gamma;
-      if (Math.abs(beta) > 35) {
-        const betaRad = (beta * Math.PI) / 180;
-        const gammaRad = (gamma * Math.PI) / 180;
-        const trueRoll = Math.atan2(Math.sin(gammaRad), Math.cos(betaRad) * Math.cos(gammaRad));
-        lean = (trueRoll * 180) / Math.PI;
-      }
-      smoothLeanRef.current = smoothLeanRef.current * 0.7 + lean * 0.3;
-      const rounded = Math.round(smoothLeanRef.current);
-      leanAngleRef.current = rounded;
-      setLeanAngleDisplay(rounded);
+    
+    engineRef.current.onLapFinish = (lapArgs) => {
+        playLapFinishBeep();
+        setLapFlash(true);
+        setTimeout(() => setLapFlash(false), 2000);
+        
+        recordLap({ ...lapArgs, driverName, vehicleType, trackId: track!._id })
+            .then(() => flushLapQueue(recordLap).then(setPendingLapCount).catch(console.error))
+            .catch((err) => {
+                console.warn('Okrążenie zapisane lokalnie w kolejce offline:', err);
+                const count = queueLap({ ...lapArgs, driverName, vehicleType, trackId: track!._id });
+                setPendingLapCount(count);
+            });
     };
-    window.addEventListener('deviceorientation', orientationHandlerRef.current);
+    
+    engineRef.current.onLocationUpdate = (point) => {
+        if (userMarker.current && leafletMap.current) {
+            userMarker.current.setLatLng([point.lat, point.lon]);
+            leafletMap.current.setView([point.lat, point.lon]);
+        }
+    };
+    
+    engineRef.current.onTelemetryTick = (state) => {
+        if (!state.currentPoint) return;
+        updateTelemetry({
+            driverName, vehicleType, trackId: track!._id,
+            lat: state.currentPoint.lat, lon: state.currentPoint.lon,
+            speed: state.speed, heading: state.heading,
+            gForce: state.gForce,
+            leanAngle: state.leanAngle,
+            timestamp: Date.now(),
+        }).catch(console.error);
+    };
+    
+    engineRef.current.onError = (msg) => {
+        setGpsError(msg);
+    };
 
+    engineRef.current.start(track, bestLapRef.current, myLapsCount + 1);
+
+    setPhase('f1_lights');
+    setIsLightsOut(false);
+    
+    setS1Time(null); setS2Time(null); setS3Time(null);
+    
     let currentLight = 0;
     const interval = setInterval(() => {
       currentLight++;
@@ -277,16 +211,12 @@ export default function Cockpit() {
         playF1StartBeep(false);
       } else {
         clearInterval(interval);
-        // Random F1 delay before Lights Out (500ms - 2000ms)
         setTimeout(() => {
           setLights(0);
           setIsLightsOut(true);
           playF1StartBeep(true);
           
-          // Start the timer EXACTLY when lights go out and beep sounds!
-          const startMs = Date.now();
-          lapStartTimeRef.current = startMs;
-          lapStartTimeLocalRef.current = performance.now();
+          if (engineRef.current) engineRef.current.setLapStart();
           setS1Time(null);
           setS2Time(null);
           setS3Time(null);
@@ -300,219 +230,16 @@ export default function Cockpit() {
     }, 1000);
   };
 
-  const startGPS = () => {
-    const track = tracks.find((t: any) => t._id === selectedTrack);
-    if (!track || !track.path || track.path.length < 2) return;
-
-    // Generate Gates with dynamic width
-    const gates: [Point, Point][] = [];
-    const baseGateWidth = 40;
-    gates.push(generateGateLine(track.path, 0, baseGateWidth));
-    if (track.s1Index !== undefined) gates.push(generateGateLine(track.path, track.s1Index, baseGateWidth));
-    if (track.s2Index !== undefined) gates.push(generateGateLine(track.path, track.s2Index, baseGateWidth));
-    gates.push(generateGateLine(track.path, track.path.length - 1, baseGateWidth));
-
-    let nextGateIndex = 1;
-    let sectorTimes: number[] = [];
-    let lastGateCrossTime = 0;
-
-    const filter = new GPSKalmanFilter();
-    let lastPoint: Point | null = null;
-    let lastTime = 0;
-    let lastTelemetryTime = 0;
-    const THROTTLE_MS = 250;
-
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        setGpsError(null);
-        const rawTime = pos.timestamp;
-        const accuracy = pos.coords.accuracy;
-        const speedKmh = (pos.coords.speed || 0) * 3.6;
-
-        timeOffsetRef.current = Date.now() - rawTime;
-        speedRef.current = speedKmh;
-        if (speedKmh > maxSpeedRef.current) maxSpeedRef.current = speedKmh;
-
-        if (accuracy != null && accuracy > MAX_GPS_ACCURACY_METERS) {
-          return;
-        }
-
-        const filtered = filter.process(pos.coords.latitude, pos.coords.longitude, accuracy, rawTime);
-        const currentPoint: Point = { lat: filtered.lat, lon: filtered.lon };
-
-        // Calculate Real-Time Live Ghost Delta
-        if (track.path && track.path.length >= 2 && lapStartTimeRef.current !== null) {
-          const { progressRatio } = calculateTrackProgress(currentPoint, track.path);
-          const currentLapElapsedSec = (rawTime - lapStartTimeRef.current) / 1000;
-          const bestLap = bestLapRef.current;
-
-          if (bestLap && bestLap.lapTime && progressRatio > 0.05) {
-            const expectedTimeSec = (bestLap.lapTime / 1000) * progressRatio;
-            liveGhostDeltaRef.current = currentLapElapsedSec - expectedTimeSec;
-          }
-        }
-
-        // Update Map Marker
-        if (userMarker.current && leafletMap.current) {
-          userMarker.current.setLatLng([currentPoint.lat, currentPoint.lon]);
-          leafletMap.current.setView([currentPoint.lat, currentPoint.lon]);
-        }
-
-        if (pos.coords.heading !== null && !isNaN(pos.coords.heading) && pos.coords.heading >= 0) {
-          lastHeadingRef.current = pos.coords.heading;
-        }
-
-        const now = Date.now();
-        if (now - lastTelemetryTime > THROTTLE_MS) {
-          lastTelemetryTime = now;
-          updateTelemetry({
-            driverName, vehicleType, trackId: track._id,
-            lat: currentPoint.lat, lon: currentPoint.lon,
-            speed: speedKmh, heading: lastHeadingRef.current,
-            gForce: gForceRef.current,
-            leanAngle: Math.round(smoothLeanRef.current || 0),
-            timestamp: rawTime,
-          }).catch(console.error);
-        }
-
-        if (lastPoint && nextGateIndex < gates.length) {
-          // Sub-sample trajectory path between previous GPS fix and current GPS fix
-          const dynamicGateWidth = getDynamicGateWidth(speedKmh, accuracy || 10);
-          const activeGateIndex = nextGateIndex;
-          let gateIndexToTest = activeGateIndex;
-          if (activeGateIndex === 1 && track.s1Index !== undefined) gateIndexToTest = track.s1Index;
-          else if (activeGateIndex === 2 && track.s2Index !== undefined) gateIndexToTest = track.s2Index;
-          else if (activeGateIndex === gates.length - 1) gateIndexToTest = track.path.length - 1;
-          else gateIndexToTest = 0;
-
-          const gate = generateGateLine(track.path, Math.min(gateIndexToTest, track.path.length - 1), dynamicGateWidth);
-
-          const subPoints = interpolateSubPoints(lastPoint, currentPoint, 6);
-          let detectedIntersection: number | null = null;
-          let detectedSubIndex = 0;
-
-          for (let step = 0; step < subPoints.length - 1; step++) {
-            const ua = checkLineIntersection(subPoints[step], subPoints[step + 1], gate[0], gate[1]);
-            if (ua !== null) {
-              detectedIntersection = ua;
-              detectedSubIndex = step;
-              break;
-            }
-          }
-
-          if (detectedIntersection !== null && Date.now() - lastGateCrossTime < MIN_GATE_REARM_MS) {
-            // Re-arm ignore
-          } else if (detectedIntersection !== null) {
-            lastGateCrossTime = Date.now();
-            const subFraction = (detectedSubIndex + detectedIntersection) / 6;
-            const exactTimestamp = lastTime + subFraction * (rawTime - lastTime);
-
-            if (nextGateIndex === 0) {
-              lapStartTimeRef.current = exactTimestamp;
-              lapStartTimeLocalRef.current = performance.now();
-              nextGateIndex++;
-            } else if (lapStartTimeRef.current !== null) {
-              const elapsed = exactTimestamp - lapStartTimeRef.current;
-              sectorTimes.push(elapsed);
-
-              const hasS1 = gates.length > 2;
-              const hasS2 = gates.length > 3;
-
-              if (nextGateIndex === 1 && hasS1) {
-                setS1Time(elapsed);
-              }
-              if (nextGateIndex === 2 && hasS2) {
-                const s2Val = elapsed - sectorTimes[0];
-                setS2Time(s2Val);
-              }
-
-              if (nextGateIndex === gates.length - 1) {
-                const totalTime = elapsed;
-                if (hasS1) {
-                  const lastSectorBoundary = hasS2 ? sectorTimes[1] : sectorTimes[0];
-                  setS3Time(totalTime - lastSectorBoundary);
-                }
-
-                const bestLap = bestLapRef.current;
-                if (bestLap) {
-                  const delta = totalTime - bestLap.lapTime;
-                  deltaRef.current = delta;
-                } else {
-                  deltaRef.current = -1;
-                }
-
-                playLapFinishBeep();
-                setLapFlash(true);
-                setTimeout(() => setLapFlash(false), 2000);
-
-                {
-                  const lapArgs = {
-                    driverName, vehicleType, trackId: track._id,
-                    lapNumber: lapNumberRef.current, lapTime: totalTime,
-                    s1: hasS1 ? sectorTimes[0] : undefined,
-                    s2: hasS2 ? (sectorTimes[1] - sectorTimes[0]) : undefined,
-                    s3: hasS1 ? (totalTime - (hasS2 ? sectorTimes[1] : sectorTimes[0])) : undefined,
-                    topSpeed: maxSpeedRef.current,
-                    maxLeanAngle: currentLapMaxLeanRef.current || 0,
-                    maxGForce: Number((currentLapMaxGRef.current || 0).toFixed(2)),
-                    timestamp: Date.now()
-                  };
-                  recordLap(lapArgs)
-                    .then(() => {
-                      flushLapQueue(recordLap).then(setPendingLapCount).catch(console.error);
-                    })
-                    .catch((err) => {
-                      console.warn('Okrążenie zapisane lokalnie w kolejce offline:', err);
-                      const count = queueLap(lapArgs);
-                      setPendingLapCount(count);
-                    });
-                }
-
-                currentLapMaxLeanRef.current = 0;
-                currentLapMaxGRef.current = 0;
-                lapNumberRef.current++;
-                nextGateIndex = 1; 
-                lapStartTimeRef.current = exactTimestamp;
-                lapStartTimeLocalRef.current = performance.now();
-                sectorTimes = [];
-              } else {
-                nextGateIndex++;
-              }
-            }
-          }
-        }
-
-        
-        lastPoint = currentPoint;
-        lastTime = rawTime;
-      },
-      (err) => {
-        console.error(err);
-        if (err.code === err.PERMISSION_DENIED) {
-          setGpsError('Brak uprawnień do lokalizacji. Włącz dostęp do GPS dla tej strony w ustawieniach telefonu/przeglądarki.');
-        } else if (err.code === err.TIMEOUT) {
-          setGpsError('Nie udało się uzyskać sygnału GPS. Wyjdź na otwartą przestrzeń i spróbuj ponownie.');
-        } else if (err.code === err.POSITION_UNAVAILABLE) {
-          setGpsError('Lokalizacja GPS jest niedostępna. Sprawdź, czy GPS jest włączony w telefonie.');
-        } else {
-          setGpsError('Błąd GPS. Sprawdź uprawnienia i połączenie lokalizacji.');
-        }
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
-    );
-  };
-
   const abortRace = async () => {
-    if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
-    if (motionHandlerRef.current) window.removeEventListener('devicemotion', motionHandlerRef.current);
-    if (orientationHandlerRef.current) window.removeEventListener('deviceorientation', orientationHandlerRef.current);
+    if (engineRef.current) {
+        engineRef.current.stop();
+        engineRef.current = null;
+    }
     
-    // Remove active telemetry for this driver immediately so they disappear from Race Control dashboard
     if (driverName) {
       clearDriverTelemetry({ driverName }).catch(console.error);
     }
 
-    // Flush any pending completed laps queue before exiting
     try {
       const remaining = await flushLapQueue(recordLap);
       setPendingLapCount(remaining);
@@ -525,9 +252,6 @@ export default function Cockpit() {
     setLights(0);
     setGpsError(null);
 
-    // Reset timing refs
-    lapStartTimeRef.current = null;
-    lapStartTimeLocalRef.current = null;
     setS1Time(null);
     setS2Time(null);
     setS3Time(null);
@@ -535,8 +259,6 @@ export default function Cockpit() {
     navigate('/control', { state: { trackId: selectedTrack } });
   };
 
-  // "Hold to confirm" handlers for the ZAKOŃCZ (exit race) button, to avoid
-  // accidental taps aborting the race while riding on rough ground.
   const cancelExitHold = () => {
     exitHoldStartRef.current = null;
     setExitHoldProgress(0);
@@ -565,11 +287,10 @@ export default function Cockpit() {
   useEffect(() => {
     return () => {
       if (exitHoldRafRef.current) cancelAnimationFrame(exitHoldRafRef.current);
+      if (engineRef.current) engineRef.current.stop();
     };
   }, []);
 
-  // Retry any laps that failed to sync (e.g. connection dropped mid-ride)
-  // once we're back online.
   useEffect(() => {
     setPendingLapCount(getQueuedLapCount());
 
@@ -594,35 +315,46 @@ export default function Cockpit() {
   useEffect(() => {
     let animationFrameId: number;
     const renderLoop = () => {
-      if (speedElRef.current) {
-        speedElRef.current.innerText = Math.round(speedRef.current).toString();
-      }
-      if (deltaElRef.current && deltaRef.current !== null) {
-        const d = deltaRef.current;
-        const color = d < 0 ? 'var(--neon-green)' : 'var(--neon-red)';
-        const sign = d < 0 ? '-' : '+';
-        deltaElRef.current.style.color = color;
-        deltaElRef.current.innerText = `${sign}${(Math.abs(d)/1000).toFixed(3)}s`;
-      }
-      if (gForceBarRef.current) {
-        const pct = Math.min(gForceRef.current / 2, 1) * 100;
-        gForceBarRef.current.style.width = `${pct}%`;
-        gForceBarRef.current.style.background = pct > 80 ? 'var(--neon-red)' : 'var(--neon-purple)';
-      }
-      if (liveTimerRef.current) {
-        if (lapStartTimeLocalRef.current !== null) {
-          // Use purely local time difference for visual smoothness to avoid micro-stutters
-          const elapsed = performance.now() - lapStartTimeLocalRef.current;
-          liveTimerRef.current.innerText = (elapsed / 1000).toFixed(3);
-        } else {
-          liveTimerRef.current.innerText = '0.000';
+      if (engineRef.current) {
+        const state = engineRef.current.getState();
+        
+        if (speedElRef.current) {
+          speedElRef.current.innerText = Math.round(state.speed).toString();
+        }
+        if (deltaElRef.current && state.delta !== null) {
+          const d = state.delta;
+          const color = d < 0 ? 'var(--neon-green)' : 'var(--neon-red)';
+          const sign = d < 0 ? '-' : '+';
+          deltaElRef.current.style.color = color;
+          deltaElRef.current.innerText = `${sign}${(Math.abs(d)/1000).toFixed(3)}s`;
+        }
+        if (gForceBarRef.current) {
+          const pct = Math.min(state.gForce / 2, 1) * 100;
+          gForceBarRef.current.style.width = `${pct}%`;
+          gForceBarRef.current.style.background = pct > 80 ? 'var(--neon-red)' : 'var(--neon-purple)';
+        }
+        if (liveTimerRef.current) {
+          if (state.lapStartTimeLocal !== null) {
+            const elapsed = performance.now() - state.lapStartTimeLocal;
+            liveTimerRef.current.innerText = (elapsed / 1000).toFixed(3);
+          } else {
+            liveTimerRef.current.innerText = '0.000';
+          }
+        }
+        
+        // Only update react state if changed (lean angle)
+        setLeanAngleDisplay(state.leanAngle);
+        
+        // Sync sector 3 time manually here if available to avoid many renders
+        if (state.s3Time !== null && s3Time !== state.s3Time) {
+            setS3Time(state.s3Time);
         }
       }
       animationFrameId = requestAnimationFrame(renderLoop);
     };
     if (phase === 'racing') renderLoop();
     return () => cancelAnimationFrame(animationFrameId);
-  }, [phase]);
+  }, [phase, s3Time]);
 
   // Setup Live Map
   useEffect(() => {

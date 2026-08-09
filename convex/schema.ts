@@ -42,7 +42,9 @@ export default defineSchema({
     gForce: v.optional(v.number()), // Calculated from accelerometer
     leanAngle: v.optional(v.number()), // Lean angle in degrees
     timestamp: v.optional(v.number()),
-  }).index("by_driverName", ["driverName"]),
+  })
+    .index("by_driverName", ["driverName"])
+    .index("by_timestamp", ["timestamp"]),
   lights: defineTable({
     status: v.string(),
   })
