@@ -18,7 +18,8 @@ export default function Cockpit() {
   const [driverName, setDriverName] = useState('');
   const [vehicleType, setVehicleType] = useState<'scooter' | 'bike'>('scooter');
   const [selectedTrack, setSelectedTrack] = useState('');
-  const [lights, setLights] = useState(0); 
+  const [lights, setLights] = useState(0);
+  const [labelsVisible, setLabelsVisible] = useState(true);
   
   // Validation errors
   const [errorName, setErrorName] = useState(false);
@@ -68,6 +69,7 @@ export default function Cockpit() {
   const leafletMap = useRef<L.Map | null>(null);
   const userMarker = useRef<L.Marker | null>(null);
   const trackPathLayer = useRef<L.Polyline | null>(null);
+  const labelsLayer = useRef<L.TileLayer | null>(null);
 
   const bestLapRef = useRef<any>(null);
   useEffect(() => {
@@ -366,10 +368,18 @@ export default function Cockpit() {
       // @ts-ignore
       leafletMap.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false, rotate: true, touchRotate: true }).setView([startPt.lat, startPt.lon], 18);
       
-      L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=pl&x={x}&y={y}&z={z}', {
+      L.tileLayer('http://mt0.google.com/vt/lyrs=s&hl=pl&x={x}&y={y}&z={z}', {
         maxZoom: 24,
         maxNativeZoom: 21,
       }).addTo(leafletMap.current);
+
+      labelsLayer.current = L.tileLayer('http://mt0.google.com/vt/lyrs=h&hl=pl&x={x}&y={y}&z={z}', {
+        maxZoom: 24,
+        maxNativeZoom: 21
+      });
+      if (labelsVisible) {
+        labelsLayer.current.addTo(leafletMap.current);
+      }
 
       if (track?.path) {
         trackPathLayer.current = L.polyline(track.path as any, { color: 'var(--neon-blue)', weight: 4 }).addTo(leafletMap.current);
@@ -383,8 +393,18 @@ export default function Cockpit() {
     if (phase !== 'racing' && leafletMap.current) {
       leafletMap.current.remove();
       leafletMap.current = null;
+      labelsLayer.current = null;
     }
   }, [phase, selectedTrack, tracks]);
+
+  useEffect(() => {
+    if (!leafletMap.current || !labelsLayer.current) return;
+    if (labelsVisible) {
+      if (!leafletMap.current.hasLayer(labelsLayer.current)) leafletMap.current.addLayer(labelsLayer.current);
+    } else {
+      if (leafletMap.current.hasLayer(labelsLayer.current)) leafletMap.current.removeLayer(labelsLayer.current);
+    }
+  }, [labelsVisible]);
 
   if (phase === 'setup') {
     return (
@@ -578,6 +598,16 @@ export default function Cockpit() {
               transition: exitHoldProgress === 0 ? 'width 0.15s ease-out' : 'none',
             }} />
             <span style={{ position: 'relative' }}>PRZYTRZYMAJ ZAKOŃCZ</span>
+          </button>
+        </div>
+
+        <div style={{ position: 'absolute', top: '70px', right: '24px', zIndex: 1000 }}>
+          <button 
+            className="btn-secondary" 
+            style={{ padding: '8px 12px', fontSize: '11px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)' }} 
+            onClick={() => setLabelsVisible(!labelsVisible)}
+          >
+            🗺️ {labelsVisible ? 'Ukryj Ulice' : 'Pokaż Ulice'}
           </button>
         </div>
 
