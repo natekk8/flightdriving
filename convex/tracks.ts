@@ -52,20 +52,3 @@ export const deleteTrack = mutation({
   },
 });
 
-export const clearAll = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const tracks = await ctx.db.query("tracks").collect();
-    for (const t of tracks) {
-      await ctx.db.delete(t._id);
-    }
-    const laps = await ctx.db.query("laps").collect();
-    for (const l of laps) {
-      await ctx.db.delete(l._id);
-    }
-    const telemetry = await ctx.db.query("telemetry").collect();
-    for (const t of telemetry) {
-      await ctx.db.delete(t._id);
-    }
-  },
-});

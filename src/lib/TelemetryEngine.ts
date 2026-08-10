@@ -50,7 +50,7 @@ export class TelemetryEngine {
   public onTelemetryTick?: (data: any) => void;
   public onError?: (msg: string) => void;
 
-  private telemetryThrottleMs = 250;
+  private telemetryThrottleMs = 400;
   private lastTelemetryTime = 0;
 
   constructor() {

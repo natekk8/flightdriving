@@ -10,7 +10,7 @@ function LiveClock() {
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setTime(now.toLocaleTimeString('pl-PL', { timeZone: 'UTC', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setTime(now.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -25,7 +25,7 @@ function LiveClock() {
       color: '#a0a0b8', fontSize: '11px', fontWeight: 600, letterSpacing: '0.5px'
     }} className="font-digital">
       <Clock size={12} style={{ color: 'var(--neon-cyan)' }} />
-      <span>{time || '00:00:00'} UTC</span>
+      <span>{time || '00:00:00'} LOCAL</span>
     </div>
   );
 }

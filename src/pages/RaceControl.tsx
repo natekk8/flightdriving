@@ -43,9 +43,6 @@ export default function RaceControl() {
   const [trainingDriver, setTrainingDriver] = useState<string>('');
   const [trainingLapAId, setTrainingLapAId] = useState<string>('');
   const [trainingLapBId, setTrainingLapBId] = useState<string>('');
-  const [isReplaying, setIsReplaying] = useState(false);
-  const [replayProgress, setReplayProgress] = useState(0);
-  const [replaySpeed, setReplaySpeed] = useState<1 | 2 | 5>(1);
   const [viewMode, setViewMode] = useState<'leaderboard' | 'all'>('leaderboard');
   
   const seenDriversRef = useRef<Set<string>>(new Set());
@@ -410,17 +407,6 @@ export default function RaceControl() {
     }
   }, [showHeatmap, selectedTrack, tracks, selectedTrackTelemetry?.gForce]);
 
-  // Session Replay tick loop
-  useEffect(() => {
-    if (!isReplaying) return;
-    const interval = setInterval(() => {
-      setReplayProgress(prev => {
-        if (prev >= 100) return 0;
-        return prev + 1 * replaySpeed;
-      });
-    }, 200);
-    return () => clearInterval(interval);
-  }, [isReplaying, replaySpeed]);
 
   return (
     <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', position: 'relative' }}>
@@ -524,51 +510,7 @@ export default function RaceControl() {
         >
           🎯 ANALIZA TRENINGU
         </button>
-
-        <button 
-          className="btn-secondary" 
-          style={{
-            flex: '1 1 150px',
-            fontSize: '12px',
-            padding: '12px 14px',
-            background: isReplaying ? 'rgba(57, 255, 20, 0.2)' : 'rgba(255,255,255,0.05)',
-            borderColor: isReplaying ? 'var(--neon-green)' : 'rgba(255,255,255,0.15)',
-            color: isReplaying ? '#fff' : 'var(--text-secondary)'
-          }}
-          onClick={() => setIsReplaying(!isReplaying)}
-        >
-          {isReplaying ? '⏸️ PAUZA REPLAY' : '▶️ ODTWÓRZ SESJĘ'}
-        </button>
       </motion.div>
-
-      {/* Interactive Session Replay Scrubber Bar */}
-      {isReplaying && (
-        <motion.div 
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          className="glass-panel" 
-          style={{ padding: '16px 24px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '20px', background: 'rgba(0, 255, 136, 0.08)', border: '1px solid var(--neon-green)' }}
-        >
-          <div style={{ fontWeight: 800, color: 'var(--neon-green)', fontSize: '14px', whiteSpace: 'nowrap' }}>
-            SESSION REPLAY ({replaySpeed}x)
-          </div>
-          <input 
-            type="range" 
-            min="0" 
-            max="100" 
-            value={replayProgress} 
-            onChange={(e) => setReplayProgress(Number(e.target.value))}
-            aria-label="Postęp odtwarzania sesji"
-            style={{ flex: 1, accentColor: 'var(--neon-green)', cursor: 'pointer' }}
-          />
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="btn-primary" style={{ padding: '4px 12px', fontSize: '11px' }} onClick={() => setReplaySpeed(1)}>1x</button>
-            <button className="btn-primary" style={{ padding: '4px 12px', fontSize: '11px' }} onClick={() => setReplaySpeed(2)}>2x</button>
-            <button className="btn-primary" style={{ padding: '4px 12px', fontSize: '11px' }} onClick={() => setReplaySpeed(5)}>5x</button>
-          </div>
-        </motion.div>
-      )}
 
       {/* 2-Driver Comparative Telemetry Overlay Modal */}
       {showCompareModal && <CompareModal
@@ -757,14 +699,14 @@ export default function RaceControl() {
           <table className="timing-table">
             <thead>
               <tr>
-                <th>Pozycja</th>
-                <th>Kierowca</th>
-                <th>Sektor 1</th>
-                <th>Sektor 2</th>
-                <th>Sektor 3</th>
-                <th>Czas Całkowity</th>
-                <th>V-Max</th>
-                <th>Strata do Lidera</th>
+                <th>POS</th>
+                <th>DRIVER</th>
+                <th>S1</th>
+                <th>S2</th>
+                <th>S3</th>
+                <th>LAP TIME</th>
+                <th>TOP SPEED</th>
+                <th>GAP</th>
               </tr>
             </thead>
             <tbody>
@@ -793,16 +735,16 @@ export default function RaceControl() {
                           borderBottom: isFocused ? 'none' : undefined
                         }}
                       >
-                        <td style={{ color: index === 0 ? 'var(--neon-purple)' : 'white', fontWeight: 900, fontSize: '18px' }}>{index + 1}</td>
+                        <td style={{ color: index === 0 ? 'var(--neon-purple)' : 'white', fontWeight: 900, fontSize: '18px', fontFamily: 'var(--font-mono)' }}>{index + 1}</td>
                         <td style={{ fontWeight: 800, fontSize: '16px', color: isFocused ? 'var(--neon-blue)' : 'white' }}>{lap.driverName}</td>
-                        <td style={{ color: s1Color, fontWeight: 700 }}>{lap.s1 ? (lap.s1/1000).toFixed(3) : '---'}</td>
-                        <td style={{ color: s2Color, fontWeight: 700 }}>{lap.s2 ? (lap.s2/1000).toFixed(3) : '---'}</td>
-                        <td style={{ color: s3Color, fontWeight: 700 }}>{lap.s3 ? (lap.s3/1000).toFixed(3) : '---'}</td>
-                        <td style={{ color: index === 0 ? 'var(--neon-purple)' : 'var(--neon-green)', fontWeight: 900, fontSize: '18px' }}>
+                        <td style={{ color: s1Color, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{lap.s1 ? (lap.s1/1000).toFixed(3) : '---'}</td>
+                        <td style={{ color: s2Color, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{lap.s2 ? (lap.s2/1000).toFixed(3) : '---'}</td>
+                        <td style={{ color: s3Color, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{lap.s3 ? (lap.s3/1000).toFixed(3) : '---'}</td>
+                        <td style={{ color: index === 0 ? 'var(--neon-purple)' : 'var(--neon-green)', fontWeight: 900, fontSize: '18px', fontFamily: 'var(--font-mono)' }}>
                           {(lap.lapTime/1000).toFixed(3)}
                         </td>
-                        <td style={{ color: 'var(--neon-orange)' }}>{Math.round(lap.topSpeed || 0)} km/h</td>
-                        <td style={{ color: index === 0 ? 'var(--text-secondary)' : 'var(--neon-red)', fontWeight: 800 }}>
+                        <td style={{ color: 'var(--neon-orange)', fontFamily: 'var(--font-mono)' }}>{Math.round(lap.topSpeed || 0)} km/h</td>
+                        <td style={{ color: index === 0 ? 'var(--text-secondary)' : 'var(--neon-red)', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
                           {deltaToLeader ? `+${(deltaToLeader/1000).toFixed(3)}s` : 'LIDER'}
                         </td>
                       </motion.tr>
