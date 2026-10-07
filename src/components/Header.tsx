@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useConvexConnectionState } from 'convex/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Radio, Wrench, Gauge, Wifi, WifiOff, Clock, Menu, X } from 'lucide-react';
+import { Radio, Wrench, Gauge, Wifi, WifiOff, Clock, Menu, X, Activity } from 'lucide-react';
 
 function LiveClock() {
   const [time, setTime] = useState<string>('');
@@ -10,7 +10,14 @@ function LiveClock() {
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setTime(now.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setTime(
+        now.toLocaleTimeString(undefined, {
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -18,14 +25,25 @@ function LiveClock() {
   }, []);
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '6px',
-      padding: '5px 10px', borderRadius: '8px',
-      background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.1)',
-      color: '#a0a0b8', fontSize: '11px', fontWeight: 600, letterSpacing: '0.5px'
-    }} className="font-digital">
-      <Clock size={12} style={{ color: 'var(--neon-cyan)' }} />
-      <span>{time || '00:00:00'} LOCAL</span>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '6px 12px',
+        borderRadius: 'var(--radius-sm)',
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid var(--border-subtle)',
+        color: 'var(--text-secondary)',
+        fontSize: '11px',
+        fontWeight: 700,
+        letterSpacing: '0.04em',
+      }}
+      className="font-digital"
+    >
+      <Clock size={12} style={{ color: 'var(--f1-cyan)' }} />
+      <span>{time || '00:00:00'}</span>
+      <span style={{ fontSize: '9px', opacity: 0.6, letterSpacing: '0.1em' }}>LOCAL</span>
     </div>
   );
 }
@@ -38,36 +56,63 @@ function ConnectionStatus() {
       <div
         title="Połączono z serwerem telemetrii Convex"
         style={{
-          display: 'flex', alignItems: 'center', gap: '5px',
-          padding: '3px 8px', borderRadius: '8px',
-          background: 'rgba(57, 255, 20, 0.1)', border: '1px solid rgba(57, 255, 20, 0.3)',
-          color: 'var(--neon-green)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase',
-          letterSpacing: '0.5px'
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '5px 10px',
+          borderRadius: 'var(--radius-sm)',
+          background: 'rgba(0, 230, 118, 0.08)',
+          border: '1px solid rgba(0, 230, 118, 0.25)',
+          color: 'var(--f1-green)',
+          fontSize: '10px',
+          fontWeight: 800,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
         }}
       >
-        <span style={{
-          width: '5px', height: '5px', borderRadius: '50%', background: 'var(--neon-green)',
-          boxShadow: '0 0 8px var(--neon-green)', animation: 'pulse 1.5s infinite'
-        }} />
-        <Wifi size={11} /> LIVE SYNC
+        <span
+          style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            background: 'var(--f1-green)',
+            boxShadow: '0 0 8px var(--f1-green)',
+          }}
+          className="pulse-glow"
+        />
+        <Wifi size={11} /> LIVE TELEMETRY
       </div>
     );
   }
 
   return (
     <div
-      title="Brak połączenia z serwerem Convex - dane telemetryczne będą synchronizowane po wznowieniu sygnału."
+      title="Brak połączenia z Convex - telemetria w trybie offline"
       style={{
-        display: 'flex', alignItems: 'center', gap: '5px',
-        padding: '3px 8px', borderRadius: '8px',
-        background: 'rgba(255, 145, 0, 0.15)', border: '1px solid var(--neon-orange)',
-        color: 'var(--neon-orange)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase',
-        letterSpacing: '0.5px'
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '5px 10px',
+        borderRadius: 'var(--radius-sm)',
+        background: 'rgba(245, 158, 11, 0.1)',
+        border: '1px solid rgba(245, 158, 11, 0.3)',
+        color: 'var(--f1-yellow)',
+        fontSize: '10px',
+        fontWeight: 800,
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
       }}
     >
       <WifiOff size={11} />
-      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--neon-orange)' }} />
-      {hasEverConnected ? 'Łączenie...' : 'Brak sygnału'}
+      <span
+        style={{
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          background: 'var(--f1-yellow)',
+        }}
+      />
+      {hasEverConnected ? 'SYNCHRONIZACJA...' : 'OFFLINE'}
     </div>
   );
 }
@@ -76,50 +121,113 @@ export default function Header() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Auto close menu on route change
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
   const navItems = [
-    { path: '/control', label: 'Race Control', icon: Radio, accent: 'var(--neon-cyan)' },
-    { path: '/setup', label: 'Creator', icon: Wrench, accent: 'var(--neon-green)' },
-    { path: '/race', label: 'Cockpit', icon: Gauge, accent: 'var(--f1-red)' }
+    { path: '/control', label: 'Race Control', icon: Radio, accent: 'var(--f1-cyan)' },
+    { path: '/setup', label: 'Creator', icon: Wrench, accent: 'var(--f1-green)' },
+    { path: '/race', label: 'Cockpit HUD', icon: Gauge, accent: 'var(--f1-red)' },
   ];
 
   return (
-    <header style={{
-      position: 'sticky', top: 0, zIndex: 1000,
-      background: 'rgba(7, 7, 10, 0.95)',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-      backdropFilter: 'blur(20px)'
-    }}>
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '10px 16px', maxWidth: '1400px', margin: '0 auto'
-      }}>
+    <header
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 1000,
+        background: 'rgba(5, 6, 8, 0.88)',
+        borderBottom: '1px solid var(--border-subtle)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px 24px',
+          maxWidth: '1440px',
+          margin: '0 auto',
+        }}
+      >
         {/* Brand / Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{
-              background: 'linear-gradient(135deg, #e10600 0%, #ff3b30 100%)',
-              color: '#fff', fontSize: '10px', fontWeight: 900, padding: '2px 6px',
-              borderRadius: '4px', transform: 'skew(-12deg)', letterSpacing: '1px',
-              boxShadow: '0 0 12px rgba(225, 6, 0, 0.6)'
-            }}>
-              F1 PIT
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <NavLink
+            to="/control"
+            style={{
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+            }}
+          >
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #f43f5e 0%, #00f0ff 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 16px rgba(0, 240, 255, 0.35)',
+              }}
+            >
+              <Activity size={18} color="#050608" strokeWidth={2.8} />
             </div>
-            <div style={{ color: 'white', fontWeight: 900, fontSize: '17px', letterSpacing: '1.5px', fontFamily: 'Outfit' }}>
-              <span style={{ color: 'var(--neon-cyan)', textShadow: '0 0 15px rgba(0,240,255,0.4)' }}>FLIGHT</span> DRIVING
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div
+                style={{
+                  color: '#ffffff',
+                  fontWeight: 900,
+                  fontSize: '16px',
+                  letterSpacing: '0.1em',
+                  lineHeight: 1.1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <span style={{ color: 'var(--f1-cyan)', textShadow: '0 0 14px rgba(0,240,255,0.5)' }}>
+                  FLIGHT
+                </span>
+                <span>DRIVING</span>
+              </div>
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  letterSpacing: '0.14em',
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                }}
+              >
+                FIA Telemetry Suite
+              </span>
             </div>
-          </div>
-          <div className="desktop-only">
+          </NavLink>
+
+          <div className="desktop-only" style={{ marginLeft: '6px' }}>
             <ConnectionStatus />
           </div>
         </div>
 
         {/* Desktop Navigation Links */}
-        <nav className="desktop-only" style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+        <nav
+          className="desktop-only"
+          style={{
+            display: 'flex',
+            gap: '6px',
+            alignItems: 'center',
+            background: 'rgba(255, 255, 255, 0.03)',
+            padding: '4px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
@@ -131,33 +239,40 @@ export default function Header() {
                   position: 'relative',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
+                  gap: '8px',
+                  padding: '8px 16px',
                   color: isActive ? '#ffffff' : 'var(--text-secondary)',
                   textDecoration: 'none',
                   fontWeight: 700,
                   fontSize: '12px',
                   textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  transition: 'color 0.2s ease'
+                  letterSpacing: '0.06em',
+                  borderRadius: 'var(--radius-sm)',
+                  transition: 'color 0.15s ease',
+                  zIndex: 1,
                 }}
               >
-                <Icon size={14} style={{ color: isActive ? item.accent : 'inherit' }} />
+                <Icon
+                  size={14}
+                  style={{
+                    color: isActive ? item.accent : 'inherit',
+                    filter: isActive ? `drop-shadow(0 0 6px ${item.accent})` : 'none',
+                  }}
+                />
                 <span>{item.label}</span>
                 {isActive && (
                   <motion.div
-                    layoutId="headerActiveTab"
+                    layoutId="headerActivePill"
                     style={{
                       position: 'absolute',
-                      bottom: '-10px',
-                      left: 0,
-                      right: 0,
-                      height: '3px',
-                      background: item.accent,
-                      boxShadow: `0 0 12px ${item.accent}`,
-                      borderRadius: '3px 3px 0 0'
+                      inset: 0,
+                      background: 'rgba(255, 255, 255, 0.07)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.12)',
+                      borderRadius: 'var(--radius-sm)',
+                      zIndex: -1,
                     }}
-                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    transition={{ type: 'spring', stiffness: 350, damping: 28 }}
                   />
                 )}
               </NavLink>
@@ -170,49 +285,61 @@ export default function Header() {
           <LiveClock />
         </div>
 
-        {/* Mobile Header Right Bar (Status + Clock + Burger Toggle Button) */}
+        {/* Mobile Header Bar */}
         <div className="mobile-only" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <ConnectionStatus />
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             style={{
-              background: mobileMenuOpen ? 'rgba(243, 18, 60, 0.2)' : 'rgba(255, 255, 255, 0.06)',
-              border: `1px solid ${mobileMenuOpen ? 'var(--neon-red)' : 'rgba(255, 255, 255, 0.15)'}`,
-              color: mobileMenuOpen ? 'var(--neon-red)' : '#fff',
-              padding: '6px 10px',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              background: mobileMenuOpen ? 'rgba(244, 63, 94, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+              border: `1px solid ${mobileMenuOpen ? 'var(--f1-red)' : 'var(--border-subtle)'}`,
+              color: mobileMenuOpen ? 'var(--f1-red)' : '#fff',
+              padding: '8px 12px',
+              borderRadius: 'var(--radius-sm)',
             }}
-            aria-label="Menu nawigacyjne"
+            aria-label="Menu"
           >
-            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Animated Dropdown Drawer */}
+      {/* Mobile Dropdown Drawer */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="mobile-only"
             style={{
               overflow: 'hidden',
-              background: 'rgba(10, 11, 16, 0.98)',
-              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-              borderBottom: '2px solid var(--f1-red)',
-              backdropFilter: 'blur(25px)'
+              background: 'rgba(9, 11, 17, 0.98)',
+              borderTop: '1px solid var(--border-subtle)',
+              borderBottom: '2px solid var(--f1-cyan)',
+              backdropFilter: 'blur(24px)',
             }}
           >
             <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '1px' }}>
-                  F1 NAVIGATION MENU
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '4px',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                    fontWeight: 800,
+                    letterSpacing: '0.1em',
+                  }}
+                >
+                  FIA RACING NAVIGATION
                 </span>
                 <LiveClock />
               </div>
@@ -230,28 +357,41 @@ export default function Header() {
                       alignItems: 'center',
                       gap: '12px',
                       padding: '14px 16px',
-                      borderRadius: '12px',
+                      borderRadius: 'var(--radius-md)',
                       background: isActive ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.02)',
-                      border: `1px solid ${isActive ? item.accent : 'rgba(255, 255, 255, 0.06)'}`,
+                      border: `1px solid ${isActive ? item.accent : 'var(--border-subtle)'}`,
                       color: isActive ? '#ffffff' : 'var(--text-secondary)',
                       textDecoration: 'none',
                       fontWeight: 800,
-                      fontSize: '14px',
+                      fontSize: '13px',
                       textTransform: 'uppercase',
-                      letterSpacing: '1px'
+                      letterSpacing: '0.06em',
                     }}
                   >
-                    <div style={{
-                      width: '32px', height: '32px', borderRadius: '8px',
-                      background: isActive ? item.accent : 'rgba(255,255,255,0.05)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: isActive ? '#000' : 'inherit'
-                    }}>
-                      <Icon size={18} />
+                    <div
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: 'var(--radius-xs)',
+                        background: isActive ? item.accent : 'rgba(255,255,255,0.05)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: isActive ? '#050608' : 'inherit',
+                      }}
+                    >
+                      <Icon size={16} />
                     </div>
                     <span>{item.label}</span>
                     {isActive && (
-                      <span style={{ marginLeft: 'auto', fontSize: '11px', color: item.accent, fontWeight: 900 }}>
+                      <span
+                        style={{
+                          marginLeft: 'auto',
+                          fontSize: '11px',
+                          color: item.accent,
+                          fontWeight: 800,
+                        }}
+                      >
                         ● ACTIVE
                       </span>
                     )}
@@ -265,5 +405,3 @@ export default function Header() {
     </header>
   );
 }
-
-
