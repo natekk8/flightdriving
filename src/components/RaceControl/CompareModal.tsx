@@ -61,7 +61,7 @@ export function CompareModal({
     return Math.round(115 - ((clamped - minSpeedVal) / speedRange) * 85);
   };
 
-  // Driver A Spline
+  // Splines
   let pathAData = '';
   if (driverALap || driverATelem) {
     const ptsA = [
@@ -74,7 +74,6 @@ export function CompareModal({
     pathAData = buildMonotonicSpline(ptsA);
   }
 
-  // Driver B Spline
   let pathBData = '';
   if (driverBLap || driverBTelem) {
     const ptsB = [
@@ -92,89 +91,68 @@ export function CompareModal({
       ? ((driverALap.lapTime - driverBLap.lapTime) / 1000).toFixed(3)
       : null;
 
-  // Scrub x coordinate: 20 to 480 (range 460)
   const scrubX = 20 + (scrubPercent / 100) * 460;
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.96 }}
+      initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      className="telemetry-card"
+      exit={{ opacity: 0, scale: 0.98 }}
+      className="clean-card"
       style={{
-        padding: '24px',
-        marginBottom: '24px',
-        border: '1px solid var(--f1-purple)',
-        boxShadow: '0 24px 60px rgba(0, 0, 0, 0.8), 0 0 25px rgba(189, 52, 254, 0.2)',
+        padding: '20px',
+        marginBottom: '20px',
       }}
     >
+      {/* Header */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '20px',
+          marginBottom: '16px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              background: 'rgba(189, 52, 254, 0.2)',
-              border: '1px solid var(--f1-purple)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--f1-purple)',
-            }}
-          >
-            <GitCompare size={18} />
-          </div>
-          <div>
-            <h3 style={{ margin: 0, color: 'var(--f1-purple)', fontSize: '15px' }}>
-              PORÓWNANIE TELEMETRII 2 KIEROWCÓW
-            </h3>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-              Analiza różnic czasowych, krzywej przyspieszenia i punktów dohamowań
-            </span>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <GitCompare size={16} style={{ color: 'var(--accent-green)' }} />
+          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#ffffff' }}>
+            Porównanie kierowców
+          </h3>
         </div>
 
         <button
-          className="btn-danger"
-          style={{ padding: '6px 14px', fontSize: '11px' }}
+          className="btn-secondary"
+          style={{ padding: '5px 10px', fontSize: '11px' }}
           onClick={() => setShowCompareModal(false)}
         >
-          <X size={14} /> ZAMKNIJ
+          <X size={13} /> Zamknij
         </button>
       </div>
 
-      {/* Driver Selectors */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+      {/* Selectors */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '12px',
+          marginBottom: '16px',
+        }}
+      >
         <div>
           <label
             htmlFor="compare-driver-a"
-            style={{
-              fontSize: '11px',
-              color: 'var(--f1-green)',
-              fontWeight: 800,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-            }}
+            style={{ fontSize: '11px', color: 'var(--accent-green)', fontWeight: 600 }}
           >
-            Kierowca A (Zielony)
+            Kierowca A
           </label>
           <select
             id="compare-driver-a"
-            aria-label="Kierowca A"
             className="custom-select"
-            style={{ marginTop: '6px' }}
+            style={{ marginTop: '4px' }}
             value={compareDriverA}
             onChange={(e) => setCompareDriverA(e.target.value)}
           >
-            <option value="">Wybierz Kierowcę A...</option>
+            <option value="">Wybierz kierowcę A...</option>
             {uniqueDrivers.map((l: any) => (
               <option key={`comp-a-${l.driverName}`} value={l.driverName}>
                 {l.driverName} ({(l.lapTime / 1000).toFixed(3)}s)
@@ -186,25 +164,18 @@ export function CompareModal({
         <div>
           <label
             htmlFor="compare-driver-b"
-            style={{
-              fontSize: '11px',
-              color: 'var(--f1-cyan)',
-              fontWeight: 800,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-            }}
+            style={{ fontSize: '11px', color: 'var(--accent-blue)', fontWeight: 600 }}
           >
-            Kierowca B (Cyjan)
+            Kierowca B
           </label>
           <select
             id="compare-driver-b"
-            aria-label="Kierowca B"
             className="custom-select"
-            style={{ marginTop: '6px' }}
+            style={{ marginTop: '4px' }}
             value={compareDriverB}
             onChange={(e) => setCompareDriverB(e.target.value)}
           >
-            <option value="">Wybierz Kierowcę B...</option>
+            <option value="">Wybierz kierowcę B...</option>
             {uniqueDrivers.map((l: any) => (
               <option key={`comp-b-${l.driverName}`} value={l.driverName}>
                 {l.driverName} ({(l.lapTime / 1000).toFixed(3)}s)
@@ -214,236 +185,121 @@ export function CompareModal({
         </div>
       </div>
 
-      {/* Speed Profile Graph */}
-      <div
-        className="telemetry-card-inner"
-        style={{
-          padding: '16px',
-          position: 'relative',
-          overflow: 'hidden',
-          marginBottom: '16px',
-        }}
-      >
+      {/* Comparison Delta */}
+      {lapTimeDelta && (
+        <div
+          className="clean-card-inner"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '16px',
+          }}
+        >
+          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            Różnica czasowa (A vs B):
+          </span>
+          <span
+            className="font-digital"
+            style={{
+              fontSize: '15px',
+              fontWeight: 700,
+              color: Number(lapTimeDelta) < 0 ? 'var(--accent-green)' : 'var(--accent-amber)',
+            }}
+          >
+            {Number(lapTimeDelta) > 0 ? `+${lapTimeDelta}s` : `${lapTimeDelta}s`}
+          </span>
+        </div>
+      )}
+
+      {/* Velocity curves SVG */}
+      <div className="clean-card-inner" style={{ padding: '14px' }}>
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '8px',
+            marginBottom: '10px',
+            fontSize: '11px',
+            color: 'var(--text-secondary)',
           }}
         >
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 800 }}>
-            PROFIL PRĘDKOŚCI WZDŁUŻ TRASY (0% ➔ 100%)
-          </span>
-          <span
-            className="font-digital"
-            style={{ fontSize: '11px', color: 'var(--f1-cyan)', fontWeight: 800 }}
-          >
-            SKALA: {Math.round(minSpeedVal)} - {Math.round(maxSpeedVal)} KM/H
-          </span>
+          <span>Wykres prędkości na dystansie toru</span>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <span style={{ color: 'var(--accent-green)', fontWeight: 600 }}>● Kierowca A</span>
+            <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>● Kierowca B</span>
+          </div>
         </div>
 
-        {!compareDriverA && !compareDriverB ? (
+        <svg
+          viewBox="0 0 500 130"
+          style={{
+            width: '100%',
+            height: '140px',
+            overflow: 'visible',
+            background: 'rgba(0, 0, 0, 0.2)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+        >
+          {/* Grid lines */}
+          <line x1="20" y1="30" x2="480" y2="30" stroke="rgba(255,255,255,0.05)" />
+          <line x1="20" y1="72" x2="480" y2="72" stroke="rgba(255,255,255,0.05)" />
+          <line x1="20" y1="115" x2="480" y2="115" stroke="rgba(255,255,255,0.05)" />
+
+          {/* S1 and S2 dividers */}
+          <line x1="160" y1="10" x2="160" y2="115" stroke="rgba(255,255,255,0.1)" strokeDasharray="3,3" />
+          <text x="162" y="20" fill="var(--text-muted)" fontSize="9">S1</text>
+          <line x1="320" y1="10" x2="320" y2="115" stroke="rgba(255,255,255,0.1)" strokeDasharray="3,3" />
+          <text x="322" y="20" fill="var(--text-muted)" fontSize="9">S2</text>
+
+          {/* Spline A */}
+          {pathAData && (
+            <path d={pathAData} fill="none" stroke="var(--accent-green)" strokeWidth="2.5" />
+          )}
+
+          {/* Spline B */}
+          {pathBData && (
+            <path d={pathBData} fill="none" stroke="var(--accent-blue)" strokeWidth="2.5" />
+          )}
+
+          {/* Scrubber vertical bar */}
+          <line
+            x1={scrubX}
+            y1="10"
+            x2={scrubX}
+            y2="115"
+            stroke="#ffffff"
+            strokeWidth="1.5"
+            strokeDasharray="2,2"
+          />
+        </svg>
+
+        {/* Timeline slider */}
+        <div style={{ marginTop: '12px' }}>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={scrubPercent}
+            onChange={(e) => setScrubPercent(Number(e.target.value))}
+            style={{ width: '100%', accentColor: 'var(--accent-green)' }}
+          />
           <div
             style={{
-              height: '140px',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              justifyContent: 'space-between',
+              fontSize: '10px',
               color: 'var(--text-muted)',
-              fontSize: '13px',
-              textAlign: 'center',
+              marginTop: '4px',
             }}
           >
-            Wybierz kierowców powyżej, aby wygenerować wykres telemetrii.
-          </div>
-        ) : (
-          <div>
-            <svg width="100%" height="140" viewBox="0 0 500 140" style={{ overflow: 'visible' }}>
-              <defs>
-                <filter id="glowGreenComp" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="2.5" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-                <filter id="glowCyanComp" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="2.5" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-
-              {/* Grid Lines */}
-              <line x1="20" y1="30" x2="480" y2="30" stroke="rgba(255,255,255,0.06)" strokeDasharray="4" />
-              <line x1="20" y1="75" x2="480" y2="75" stroke="rgba(255,255,255,0.06)" strokeDasharray="4" />
-              <line x1="20" y1="120" x2="480" y2="120" stroke="rgba(255,255,255,0.06)" strokeDasharray="4" />
-
-              {/* Sector markers */}
-              <line x1="160" y1="20" x2="160" y2="130" stroke="rgba(255,255,255,0.15)" strokeDasharray="3,3" />
-              <line x1="320" y1="20" x2="320" y2="130" stroke="rgba(255,255,255,0.15)" strokeDasharray="3,3" />
-
-              {/* Driver A Curve */}
-              {pathAData && (
-                <>
-                  <path
-                    d={pathAData}
-                    fill="none"
-                    stroke="var(--f1-green)"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                    filter="url(#glowGreenComp)"
-                  />
-                  <circle cx="160" cy={speedToY(s1A)} r="4" fill="var(--f1-green)" />
-                  <circle cx="320" cy={speedToY(s2A)} r="4" fill="var(--f1-green)" />
-                  <circle cx="420" cy={speedToY(topA)} r="4" fill="var(--f1-green)" />
-                </>
-              )}
-
-              {/* Driver B Curve */}
-              {pathBData && (
-                <>
-                  <path
-                    d={pathBData}
-                    fill="none"
-                    stroke="var(--f1-cyan)"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                    filter="url(#glowCyanComp)"
-                  />
-                  <circle cx="160" cy={speedToY(s1B)} r="4" fill="var(--f1-cyan)" />
-                  <circle cx="320" cy={speedToY(s2B)} r="4" fill="var(--f1-cyan)" />
-                  <circle cx="420" cy={speedToY(topB)} r="4" fill="var(--f1-cyan)" />
-                </>
-              )}
-
-              {/* Interactive Telemetry Scrubber Needle */}
-              <line
-                x1={scrubX}
-                y1="10"
-                x2={scrubX}
-                y2="135"
-                stroke="var(--f1-purple)"
-                strokeWidth="2"
-                strokeDasharray="2,2"
-              />
-              <circle cx={scrubX} cy="10" r="4" fill="var(--f1-purple)" />
-            </svg>
-
-            {/* Scrubber Range Slider */}
-            <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 800 }}>
-                SCRUBBER: {scrubPercent}% TRASY
-              </span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={scrubPercent}
-                onChange={(e) => setScrubPercent(Number(e.target.value))}
-                style={{ flex: 1, accentColor: 'var(--f1-purple)', cursor: 'ew-resize' }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Comparison Metrics Cards */}
-      {(driverALap || driverBLap) && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-            gap: '10px',
-          }}
-        >
-          {/* Lap Time */}
-          <div className="telemetry-card-inner" style={{ padding: '12px' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 800 }}>CZAS OKRĄŻENIA</div>
-            <div className="font-digital" style={{ fontSize: '14px', fontWeight: 800, marginTop: '4px' }}>
-              <span style={{ color: 'var(--f1-green)' }}>
-                {driverALap ? (driverALap.lapTime / 1000).toFixed(3) : '--'}s
-              </span>
-              <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>/</span>
-              <span style={{ color: 'var(--f1-cyan)' }}>
-                {driverBLap ? (driverBLap.lapTime / 1000).toFixed(3) : '--'}s
-              </span>
-            </div>
-            {lapTimeDelta !== null && (
-              <div
-                className="font-digital"
-                style={{
-                  fontSize: '11px',
-                  marginTop: '4px',
-                  fontWeight: 800,
-                  color: Number(lapTimeDelta) < 0 ? 'var(--f1-green)' : 'var(--f1-cyan)',
-                }}
-              >
-                Δ {Number(lapTimeDelta) < 0 ? `${lapTimeDelta}s (A szybszy)` : `+${lapTimeDelta}s (B szybszy)`}
-              </div>
-            )}
-          </div>
-
-          {/* S1 */}
-          <div className="telemetry-card-inner" style={{ padding: '12px' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 800 }}>SEKTOR 1</div>
-            <div className="font-digital" style={{ fontSize: '14px', fontWeight: 800, marginTop: '4px' }}>
-              <span style={{ color: 'var(--f1-green)' }}>
-                {driverALap?.s1 ? (driverALap.s1 / 1000).toFixed(3) : '--'}s
-              </span>
-              <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>/</span>
-              <span style={{ color: 'var(--f1-cyan)' }}>
-                {driverBLap?.s1 ? (driverBLap.s1 / 1000).toFixed(3) : '--'}s
-              </span>
-            </div>
-          </div>
-
-          {/* S2 */}
-          <div className="telemetry-card-inner" style={{ padding: '12px' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 800 }}>SEKTOR 2</div>
-            <div className="font-digital" style={{ fontSize: '14px', fontWeight: 800, marginTop: '4px' }}>
-              <span style={{ color: 'var(--f1-green)' }}>
-                {driverALap?.s2 ? (driverALap.s2 / 1000).toFixed(3) : '--'}s
-              </span>
-              <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>/</span>
-              <span style={{ color: 'var(--f1-cyan)' }}>
-                {driverBLap?.s2 ? (driverBLap.s2 / 1000).toFixed(3) : '--'}s
-              </span>
-            </div>
-          </div>
-
-          {/* Top Speed */}
-          <div className="telemetry-card-inner" style={{ padding: '12px' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 800 }}>V MAX</div>
-            <div className="font-digital" style={{ fontSize: '14px', fontWeight: 800, marginTop: '4px' }}>
-              <span style={{ color: 'var(--f1-green)' }}>
-                {driverALap?.topSpeed ? Math.round(driverALap.topSpeed) : '--'}
-              </span>
-              <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>/</span>
-              <span style={{ color: 'var(--f1-cyan)' }}>
-                {driverBLap?.topSpeed ? Math.round(driverBLap.topSpeed) : '--'} km/h
-              </span>
-            </div>
-          </div>
-
-          {/* Max G */}
-          <div className="telemetry-card-inner" style={{ padding: '12px' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 800 }}>MAKS. G-FORCE</div>
-            <div className="font-digital" style={{ fontSize: '14px', fontWeight: 800, marginTop: '4px' }}>
-              <span style={{ color: 'var(--f1-green)' }}>
-                {driverALap?.maxGForce ? `${driverALap.maxGForce}G` : '--'}
-              </span>
-              <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>/</span>
-              <span style={{ color: 'var(--f1-cyan)' }}>
-                {driverBLap?.maxGForce ? `${driverBLap.maxGForce}G` : '--'}
-              </span>
-            </div>
+            <span>Start</span>
+            <span>Sektor 1</span>
+            <span>Sektor 2</span>
+            <span>Meta ({scrubPercent}%)</span>
           </div>
         </div>
-      )}
+      </div>
     </motion.div>
   );
 }

@@ -12,28 +12,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { TelemetryEngine } from '../lib/TelemetryEngine';
 import {
-  Gauge,
   Maximize2,
   Minimize2,
-  Sun,
-  Moon,
   Play,
-  RotateCcw,
+  Square,
   Sparkles,
   MapPin,
-  AlertTriangle,
-  Compass,
+  AlertCircle,
   WifiOff,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export default function Cockpit() {
   const navigate = useNavigate();
-  const [phase, setPhase] = useState<'setup' | 'f1_lights' | 'racing'>('setup');
+  const [phase, setPhase] = useState<'setup' | 'countdown' | 'racing'>('setup');
   const [driverName, setDriverName] = useState('');
   const [vehicleType, setVehicleType] = useState<'scooter' | 'bike'>('scooter');
   const [selectedTrack, setSelectedTrack] = useState('');
-  const [lights, setLights] = useState(0);
-  const [labelsVisible, setLabelsVisible] = useState(true);
+  const [countdownStep, setCountdownStep] = useState(0);
+  const labelsVisible = true;
+  const [showMap, setShowMap] = useState(false);
   const [outdoorMode, setOutdoorMode] = useState(false);
   const [isSimulated, setIsSimulated] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -51,7 +50,7 @@ export default function Cockpit() {
   const [s1Time, setS1Time] = useState<number | null>(null);
   const [s2Time, setS2Time] = useState<number | null>(null);
   const [s3Time, setS3Time] = useState<number | null>(null);
-  const [lapFlash, setLapFlash] = useState(false);
+  const [lastCompletedLapTime, setLastCompletedLapTime] = useState<number | null>(null);
 
   // UI elements for rAF loop
   const speedElRef = useRef<HTMLDivElement>(null);
@@ -60,15 +59,7 @@ export default function Cockpit() {
   const liveTimerRef = useRef<HTMLDivElement>(null);
 
   const engineRef = useRef<TelemetryEngine | null>(null);
-
   const [pendingLapCount, setPendingLapCount] = useState(0);
-
-  const [exitHoldProgress, setExitHoldProgress] = useState(0);
-  const exitHoldStartRef = useRef<number | null>(null);
-  const exitHoldRafRef = useRef<number | null>(null);
-  const EXIT_HOLD_MS = 900;
-
-  const [isLightsOut, setIsLightsOut] = useState(false);
 
   // @ts-ignore
   const rawTracks = useQuery(api.tracks.getTracks);
@@ -148,7 +139,7 @@ export default function Cockpit() {
 
   const validateTrackConfig = (track: any): string | null => {
     if (!track || !track.path || track.path.length < 2) {
-      return 'Ta trasa nie ma poprawnie zdefiniowanej ścieżki (min. 2 punkty). Popraw ją w Kreatorze Tras.';
+      return 'Ta trasa nie ma poprawnie zdefiniowanej ścieżki (min. 2 punkty).';
     }
     const lastIndex = track.path.length - 1;
     if (track.s1Index !== undefined && (track.s1Index <= 0 || track.s1Index >= lastIndex)) {
@@ -231,8 +222,8 @@ export default function Cockpit() {
 
     engineRef.current.onLapFinish = (lapArgs) => {
       playLapFinishBeep();
-      setLapFlash(true);
-      setTimeout(() => setLapFlash(false), 2000);
+      setLastCompletedLapTime(lapArgs.lapTime);
+      setTimeout(() => setLastCompletedLapTime(null), 3000);
 
       recordLap({ ...lapArgs, driverName, vehicleType, trackId: track!._id })
         .then(() => flushLapQueue(recordLap).then(setPendingLapCount).catch(console.error))
@@ -272,45 +263,40 @@ export default function Cockpit() {
 
     engineRef.current.start(track, bestLapRef.current, myLapsCount + 1);
 
-    setPhase('f1_lights');
-    setIsLightsOut(false);
-    setS1Time(null);
-    setS2Time(null);
-    setS3Time(null);
+    // Countdown sequence (3, 2, 1, START)
+    setPhase('countdown');
+    setCountdownStep(3);
+    playF1StartBeep(false);
 
-    let currentLight = 0;
-    const interval = setInterval(() => {
-      currentLight++;
-      if (currentLight <= 5) {
-        setLights(currentLight);
+    let step = 3;
+    const countdownTimer = setInterval(() => {
+      step--;
+      if (step > 0) {
+        setCountdownStep(step);
         playF1StartBeep(false);
       } else {
-        clearInterval(interval);
-        setTimeout(() => {
-          setLights(0);
-          setIsLightsOut(true);
-          playF1StartBeep(true);
+        clearInterval(countdownTimer);
+        setCountdownStep(0); // GO!
+        playF1StartBeep(true);
 
-          if (engineRef.current) {
-            engineRef.current.setLapStart();
-            if (isSimulated) {
-              engineRef.current.startSimulator(45, 180);
-            }
+        if (engineRef.current) {
+          engineRef.current.setLapStart();
+          if (isSimulated) {
+            engineRef.current.startSimulator(40, 160);
           }
-          setS1Time(null);
-          setS2Time(null);
-          setS3Time(null);
+        }
+        setS1Time(null);
+        setS2Time(null);
+        setS3Time(null);
 
-          setTimeout(() => {
-            setPhase('racing');
-            setIsLightsOut(false);
-          }, 700);
-        }, 500 + Math.random() * 1200);
+        setTimeout(() => {
+          setPhase('racing');
+        }, 500);
       }
-    }, 900);
+    }, 850);
   };
 
-  const abortRace = async () => {
+  const stopRace = async () => {
     if (engineRef.current) {
       engineRef.current.stop();
       engineRef.current = null;
@@ -329,7 +315,7 @@ export default function Cockpit() {
 
     releaseWakeLock();
     setPhase('setup');
-    setLights(0);
+    setCountdownStep(0);
     setGpsError(null);
     setS1Time(null);
     setS2Time(null);
@@ -338,34 +324,8 @@ export default function Cockpit() {
     navigate('/control', { state: { trackId: selectedTrack } });
   };
 
-  const cancelExitHold = () => {
-    exitHoldStartRef.current = null;
-    setExitHoldProgress(0);
-    if (exitHoldRafRef.current) cancelAnimationFrame(exitHoldRafRef.current);
-    exitHoldRafRef.current = null;
-  };
-
-  const startExitHold = () => {
-    exitHoldStartRef.current = performance.now();
-    const tick = () => {
-      if (exitHoldStartRef.current === null) return;
-      const elapsed = performance.now() - exitHoldStartRef.current;
-      const pct = Math.min(elapsed / EXIT_HOLD_MS, 1);
-      setExitHoldProgress(pct);
-      if (pct >= 1) {
-        exitHoldStartRef.current = null;
-        setExitHoldProgress(0);
-        abortRace();
-        return;
-      }
-      exitHoldRafRef.current = requestAnimationFrame(tick);
-    };
-    exitHoldRafRef.current = requestAnimationFrame(tick);
-  };
-
   useEffect(() => {
     return () => {
-      if (exitHoldRafRef.current) cancelAnimationFrame(exitHoldRafRef.current);
       if (engineRef.current) engineRef.current.stop();
     };
   }, []);
@@ -389,55 +349,51 @@ export default function Cockpit() {
     };
   }, [recordLap]);
 
-  // 60/120FPS rAF render loop
+  // 60FPS rAF render loop for speedometer and lap timer
   useEffect(() => {
     let animationFrameId: number;
     const renderLoop = () => {
       if (engineRef.current) {
         const state = engineRef.current.getState();
 
-        // Speedometer
         if (speedElRef.current) {
           speedElRef.current.innerText = Math.round(state.speed).toString();
         }
 
-        // Live Ghost Delta
         if (deltaElRef.current) {
           if (state.liveGhostDelta !== null) {
             const d = state.liveGhostDelta;
             const isAhead = d <= 0;
             const sign = isAhead ? '-' : '+';
-            deltaElRef.current.style.color = isAhead ? 'var(--f1-green)' : 'var(--f1-red)';
+            deltaElRef.current.style.color = isAhead ? 'var(--accent-green)' : 'var(--accent-amber)';
             deltaElRef.current.innerText = `${sign}${Math.abs(d).toFixed(2)}s`;
           } else {
-            deltaElRef.current.innerText = 'DELTA --.--';
+            deltaElRef.current.innerText = '--.--';
             deltaElRef.current.style.color = 'var(--text-muted)';
           }
         }
 
-        // Friction Circle (G-Force dot)
         if (gForceDotRef.current) {
           const maxG = 1.5;
           const clampedG = Math.min(state.gForce, maxG);
-          const normalizedRadius = (clampedG / maxG) * 32;
+          const normalizedRadius = (clampedG / maxG) * 28;
           const rad = (state.heading * Math.PI) / 180;
-          const cx = 40 + Math.sin(rad) * normalizedRadius;
-          const cy = 40 - Math.cos(rad) * normalizedRadius;
+          const cx = 36 + Math.sin(rad) * normalizedRadius;
+          const cy = 36 - Math.cos(rad) * normalizedRadius;
           gForceDotRef.current.setAttribute('cx', cx.toFixed(1));
           gForceDotRef.current.setAttribute('cy', cy.toFixed(1));
-          gForceDotRef.current.setAttribute(
-            'fill',
-            clampedG > 1.0 ? 'var(--f1-red)' : clampedG > 0.6 ? 'var(--f1-yellow)' : 'var(--f1-cyan)'
-          );
         }
 
-        // Live Lap Timer
         if (liveTimerRef.current) {
           if (state.lapStartTimeLocal !== null) {
             const elapsed = performance.now() - state.lapStartTimeLocal;
-            liveTimerRef.current.innerText = (elapsed / 1000).toFixed(3);
+            const seconds = elapsed / 1000;
+            const mins = Math.floor(seconds / 60);
+            const remSecs = (seconds % 60).toFixed(2);
+            liveTimerRef.current.innerText =
+              mins > 0 ? `${mins}:${remSecs.padStart(5, '0')}` : remSecs;
           } else {
-            liveTimerRef.current.innerText = '0.000';
+            liveTimerRef.current.innerText = '0.00';
           }
         }
 
@@ -461,9 +417,9 @@ export default function Cockpit() {
     return () => cancelAnimationFrame(animationFrameId);
   }, [phase, leanAngleDisplay, lapNumberDisplay, s3Time]);
 
-  // Setup Live Map
+  // Setup Leaflet map when user expands map
   useEffect(() => {
-    if (phase === 'racing' && mapRef.current && !leafletMap.current) {
+    if (phase === 'racing' && showMap && mapRef.current && !leafletMap.current) {
       const track = tracks.find((t: any) => t._id === selectedTrack);
       const startPt = track?.path?.[0] || { lat: 51.95, lon: 20.15 };
 
@@ -481,254 +437,232 @@ export default function Cockpit() {
         className: 'map-tiles-dark',
       }).addTo(leafletMap.current);
 
-      labelsLayer.current = L.tileLayer('http://mt0.google.com/vt/lyrs=h&hl=pl&x={x}&y={y}&z={z}', {
-        maxZoom: 24,
-        maxNativeZoom: 21,
-      });
+      labelsLayer.current = L.tileLayer(
+        'http://mt0.google.com/vt/lyrs=h&hl=pl&x={x}&y={y}&z={z}',
+        { maxZoom: 24, maxNativeZoom: 21 }
+      );
 
       if (labelsVisible) {
         labelsLayer.current.addTo(leafletMap.current);
       }
 
       if (track?.path) {
-        trackPathLayer.current = L.polyline(track.path as any, {
-          color: 'var(--f1-cyan)',
-          weight: 4,
-          opacity: 0.85,
-        }).addTo(leafletMap.current);
+        trackPathLayer.current = L.polyline(
+          track.path.map((p: any) => [p.lat, p.lon]),
+          { color: 'var(--accent-green)', weight: 5, opacity: 0.9 }
+        ).addTo(leafletMap.current);
       }
 
-      const html = `<div style="width:24px;height:24px;background:var(--f1-red);border-radius:50%;border:3px solid white;box-shadow:0 0 18px var(--f1-red);"></div>`;
-      const icon = L.divIcon({ html, className: '', iconSize: [24, 24] });
-      userMarker.current = L.marker([startPt.lat, startPt.lon], { icon }).addTo(leafletMap.current);
+      const icon = L.divIcon({
+        html: `<div style="width:18px;height:18px;background:var(--accent-green);border:2px solid #ffffff;border-radius:50%;box-shadow:0 0 10px var(--accent-green);"></div>`,
+        className: '',
+        iconSize: [18, 18],
+      });
+      userMarker.current = L.marker([startPt.lat, startPt.lon], { icon }).addTo(
+        leafletMap.current
+      );
     }
 
-    if (phase !== 'racing' && leafletMap.current) {
+    if (!showMap && leafletMap.current) {
       leafletMap.current.remove();
       leafletMap.current = null;
-      labelsLayer.current = null;
+      userMarker.current = null;
+      trackPathLayer.current = null;
     }
-  }, [phase, selectedTrack, tracks, labelsVisible]);
+  }, [phase, showMap, selectedTrack, tracks, labelsVisible]);
 
-  useEffect(() => {
-    if (!leafletMap.current || !labelsLayer.current) return;
-    if (labelsVisible) {
-      if (!leafletMap.current.hasLayer(labelsLayer.current)) {
-        labelsLayer.current.addTo(leafletMap.current);
-      }
-    } else {
-      if (leafletMap.current.hasLayer(labelsLayer.current)) {
-        leafletMap.current.removeLayer(labelsLayer.current);
-      }
-    }
-  }, [labelsVisible]);
-
-  // Phase 1: Setup
+  // PHASE 1: MINIMALIST SETUP
   if (phase === 'setup') {
     return (
-      <div style={{ maxWidth: '640px', margin: '40px auto', padding: '0 16px' }}>
+      <div style={{ maxWidth: '480px', margin: '40px auto', padding: '0 16px' }}>
         <motion.div
-          initial={{ opacity: 0, y: 18 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="telemetry-card"
-          style={{
-            borderTop: '3px solid var(--f1-red)',
-            padding: '28px',
-          }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="clean-card"
+          style={{ padding: '28px 24px' }}
         >
-          {/* Card Title */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '20px',
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  color: 'var(--f1-red)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.12em',
-                }}
-              >
-                <Gauge size={14} /> LIVE COCKPIT HUD
-              </div>
-              <h2
-                style={{
-                  fontSize: '24px',
-                  fontWeight: 900,
-                  letterSpacing: '0.02em',
-                  marginTop: '4px',
-                  color: '#ffffff',
-                }}
-              >
-                Konfiguracja Sesji Wyścigowej
-              </h2>
-            </div>
-            <span
+          {/* Header */}
+          <div style={{ marginBottom: '24px' }}>
+            <h1
               style={{
-                fontSize: '10px',
+                fontSize: '22px',
                 fontWeight: 800,
-                padding: '4px 10px',
-                borderRadius: 'var(--radius-xs)',
-                background: 'rgba(244, 63, 94, 0.15)',
-                border: '1px solid var(--f1-red)',
-                color: 'var(--f1-red)',
-                letterSpacing: '0.08em',
+                letterSpacing: '-0.02em',
+                marginBottom: '6px',
+                color: 'var(--text-main)',
               }}
             >
-              FIA READY
-            </span>
+              Rozpocznij przejazd
+            </h1>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              Wybierz tor oraz pojazd, aby rozpocząć precyzyjny pomiar okrążeń.
+            </p>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {/* Driver Name Input */}
-            <motion.div
-              animate={errorName ? { x: [-8, 8, -6, 6, 0] } : {}}
-              transition={{ duration: 0.35 }}
-            >
-              <label
-                htmlFor="driverName"
-                style={{
-                  display: 'block',
-                  marginBottom: '8px',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  color: errorName ? 'var(--f1-red)' : 'var(--text-secondary)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                }}
-              >
-                Kierowca / Alias {errorName && ' (WYMAGANE)'}
-              </label>
-              <input
-                id="driverName"
-                className="custom-input"
-                style={{ borderColor: errorName ? 'var(--f1-red)' : undefined }}
-                placeholder="Wpisz np. Max Verstappen..."
-                value={driverName}
-                onChange={(e) => setDriverName(e.target.value)}
-              />
-            </motion.div>
-
-            {/* Vehicle Type Selection */}
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  marginBottom: '8px',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  color: 'var(--text-secondary)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                }}
-              >
-                Kategoria Pojazdu
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  style={{
-                    padding: '14px',
-                    background:
-                      vehicleType === 'scooter'
-                        ? 'rgba(0, 240, 255, 0.12)'
-                        : 'rgba(255,255,255,0.03)',
-                    borderColor:
-                      vehicleType === 'scooter' ? 'var(--f1-cyan)' : 'var(--border-subtle)',
-                    color: vehicleType === 'scooter' ? '#fff' : 'var(--text-secondary)',
-                  }}
-                  onClick={() => setVehicleType('scooter')}
-                >
-                  🛴 Hulajnoga Elektryczna
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  style={{
-                    padding: '14px',
-                    background:
-                      vehicleType === 'bike'
-                        ? 'rgba(0, 230, 118, 0.12)'
-                        : 'rgba(255,255,255,0.03)',
-                    borderColor:
-                      vehicleType === 'bike' ? 'var(--f1-green)' : 'var(--border-subtle)',
-                    color: vehicleType === 'bike' ? '#fff' : 'var(--text-secondary)',
-                  }}
-                  onClick={() => setVehicleType('bike')}
-                >
-                  🚴 Rower Szosowy / Gravel
-                </button>
-              </div>
-            </div>
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             {/* Track Selector */}
-            <motion.div
-              animate={errorTrack ? { x: [-8, 8, -6, 6, 0] } : {}}
-              transition={{ duration: 0.35 }}
-            >
+            <div>
               <label
                 htmlFor="trackSelect"
                 style={{
                   display: 'block',
-                  marginBottom: '8px',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  color: errorTrack ? 'var(--f1-red)' : 'var(--text-secondary)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
+                  marginBottom: '6px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: errorTrack ? 'var(--accent-red)' : 'var(--text-secondary)',
                 }}
               >
-                Tor Wyścigowy {errorTrack && ' (WYMAGANE)'}
+                Tor {errorTrack && '— wybierz tor'}
               </label>
               <select
                 id="trackSelect"
                 className="custom-select"
-                style={{ borderColor: errorTrack ? 'var(--f1-red)' : undefined }}
+                style={{ borderColor: errorTrack ? 'var(--accent-red)' : undefined }}
                 value={selectedTrack}
                 onChange={(e) => setSelectedTrack(e.target.value)}
               >
-                <option value="">Wybierz trasę z bazy danych...</option>
+                <option value="">Wybierz tor...</option>
                 {tracks.map((t: any) => (
                   <option key={t._id} value={t._id}>
-                    {t.name} ({t.path?.length || 0} punktów)
+                    {t.name} ({t.path?.length || 0} pkt)
                   </option>
                 ))}
               </select>
               {trackConfigError && (
                 <div
                   style={{
-                    color: 'var(--f1-red)',
+                    color: 'var(--accent-red)',
                     fontSize: '12px',
-                    marginTop: '8px',
-                    fontWeight: 700,
+                    marginTop: '6px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
+                    gap: '4px',
                   }}
                 >
-                  <AlertTriangle size={14} /> {trackConfigError}
+                  <AlertCircle size={13} /> {trackConfigError}
                 </div>
               )}
-            </motion.div>
+            </div>
 
-            {/* Options Toggle Bar: Simulator Mode & Outdoor High Contrast */}
+            {/* Vehicle Type Selector: Hulajnoga / Rower */}
+            <div>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '6px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                Pojazd
+              </label>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '4px',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  padding: '3px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setVehicleType('scooter')}
+                  style={{
+                    position: 'relative',
+                    padding: '9px 12px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: vehicleType === 'scooter' ? '#ffffff' : 'var(--text-secondary)',
+                    background: 'transparent',
+                    borderRadius: 'calc(var(--radius-sm) - 2px)',
+                    zIndex: 1,
+                  }}
+                >
+                  Hulajnoga
+                  {vehicleType === 'scooter' && (
+                    <motion.div
+                      layoutId="vehicleSelectorPill"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid var(--border-medium)',
+                        borderRadius: 'calc(var(--radius-sm) - 2px)',
+                        zIndex: -1,
+                      }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setVehicleType('bike')}
+                  style={{
+                    position: 'relative',
+                    padding: '9px 12px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: vehicleType === 'bike' ? '#ffffff' : 'var(--text-secondary)',
+                    background: 'transparent',
+                    borderRadius: 'calc(var(--radius-sm) - 2px)',
+                    zIndex: 1,
+                  }}
+                >
+                  Rower
+                  {vehicleType === 'bike' && (
+                    <motion.div
+                      layoutId="vehicleSelectorPill"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid var(--border-medium)',
+                        borderRadius: 'calc(var(--radius-sm) - 2px)',
+                        zIndex: -1,
+                      }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Driver Name Input */}
+            <div>
+              <label
+                htmlFor="driverName"
+                style={{
+                  display: 'block',
+                  marginBottom: '6px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: errorName ? 'var(--accent-red)' : 'var(--text-secondary)',
+                }}
+              >
+                Kierowca {errorName && '— wpisz nazwę'}
+              </label>
+              <input
+                id="driverName"
+                className="custom-input"
+                style={{ borderColor: errorName ? 'var(--accent-red)' : undefined }}
+                placeholder="Twoje imię lub pseudonim"
+                value={driverName}
+                onChange={(e) => setDriverName(e.target.value)}
+              />
+            </div>
+
+            {/* Extra Options */}
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '10px',
-                paddingTop: '6px',
+                display: 'flex',
+                gap: '8px',
+                paddingTop: '4px',
               }}
             >
               <button
@@ -736,15 +670,16 @@ export default function Cockpit() {
                 className="btn-secondary"
                 onClick={() => setIsSimulated(!isSimulated)}
                 style={{
-                  padding: '10px 14px',
-                  background: isSimulated ? 'rgba(0, 240, 255, 0.12)' : 'rgba(255,255,255,0.02)',
-                  borderColor: isSimulated ? 'var(--f1-cyan)' : 'var(--border-subtle)',
-                  color: isSimulated ? 'var(--f1-cyan)' : 'var(--text-secondary)',
-                  fontSize: '11px',
-                  textTransform: 'none',
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontSize: '12px',
+                  color: isSimulated ? 'var(--accent-green)' : 'var(--text-secondary)',
+                  background: isSimulated ? 'var(--accent-green-bg)' : 'transparent',
+                  borderColor: isSimulated ? 'rgba(16, 185, 129, 0.3)' : 'var(--border-subtle)',
                 }}
               >
-                <Sparkles size={14} /> {isSimulated ? 'Symulator GPS: WŁĄCZONY' : 'Symulator GPS (Test)'}
+                <Sparkles size={13} />
+                <span>Symulacja GPS</span>
               </button>
 
               <button
@@ -752,662 +687,389 @@ export default function Cockpit() {
                 className="btn-secondary"
                 onClick={() => setOutdoorMode(!outdoorMode)}
                 style={{
-                  padding: '10px 14px',
-                  background: outdoorMode ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255,255,255,0.02)',
-                  borderColor: outdoorMode ? 'var(--f1-yellow)' : 'var(--border-subtle)',
-                  color: outdoorMode ? 'var(--f1-yellow)' : 'var(--text-secondary)',
-                  fontSize: '11px',
-                  textTransform: 'none',
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontSize: '12px',
+                  color: outdoorMode ? '#ffffff' : 'var(--text-secondary)',
+                  background: outdoorMode ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
                 }}
               >
-                {outdoorMode ? <Sun size={14} /> : <Moon size={14} />}{' '}
-                {outdoorMode ? 'Tryb Słoneczny: ON' : 'Tryb Słoneczny (OLED)'}
+                {outdoorMode ? <Sun size={13} /> : <Moon size={13} />}
+                <span>Kontrast</span>
               </button>
             </div>
 
-            {/* Action Buttons */}
-            <button
+            {/* Start Button */}
+            <motion.button
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
               className="btn-primary"
               style={{
-                marginTop: '10px',
+                marginTop: '12px',
                 width: '100%',
-                padding: '16px',
+                padding: '14px',
                 fontSize: '14px',
-                fontWeight: 900,
+                fontWeight: 700,
               }}
               onClick={startRace}
             >
-              <Play size={16} /> ROZPOCZNIJ PROCEDURĘ STARTOWĄ (LIGHTS OUT)
-            </button>
+              <Play size={16} fill="currentColor" />
+              <span>Rozpocznij jazdę</span>
+            </motion.button>
           </div>
         </motion.div>
       </div>
     );
   }
 
-  // Phase 2: F1 Start Lights & Racing
+  // PHASE 2: SIMPLE COUNTDOWN
+  if (phase === 'countdown') {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 'calc(100vh - 120px)',
+          textAlign: 'center',
+        }}
+      >
+        <motion.div
+          key={countdownStep}
+          initial={{ opacity: 0, scale: 0.7 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 1.3 }}
+          transition={{ duration: 0.3, ease: 'easeOut' }}
+        >
+          <div
+            className="font-digital"
+            style={{
+              fontSize: 'clamp(80px, 18vw, 160px)',
+              fontWeight: 800,
+              color: countdownStep === 0 ? 'var(--accent-green)' : '#ffffff',
+              lineHeight: 1,
+            }}
+          >
+            {countdownStep > 0 ? countdownStep : 'START'}
+          </div>
+        </motion.div>
+        <p style={{ marginTop: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>
+          Przygotuj się do rozpoczęcia okrążenia
+        </p>
+      </div>
+    );
+  }
+
+  // PHASE 3: RACING HUD (MINIMALIST & INTUITIVE)
   return (
     <div
       className={outdoorMode ? 'cockpit-outdoor' : ''}
       style={{
-        position: 'fixed',
-        inset: 0,
-        background: outdoorMode ? '#000000' : 'var(--bg-deep)',
-        zIndex: 9999,
+        maxWidth: '960px',
+        margin: '0 auto',
+        padding: '20px 16px',
         display: 'flex',
         flexDirection: 'column',
+        gap: '20px',
       }}
     >
-      {/* Background Map in Racing Phase */}
-      {phase === 'racing' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
-          <div
-            ref={mapRef}
+      {/* Top Session Bar */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '12px',
+          flexWrap: 'wrap',
+        }}
+      >
+        {/* Driver info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '16px', fontWeight: 700, color: '#ffffff' }}>
+            {driverName}
+          </span>
+          <span
             style={{
-              width: '100%',
-              height: '100%',
-              filter: outdoorMode ? 'brightness(0.2) contrast(1.5)' : 'brightness(0.35) saturate(1.2)',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: outdoorMode
-                ? 'linear-gradient(to bottom, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.95) 100%)'
-                : 'linear-gradient(to bottom, rgba(5,6,8,0.85) 0%, rgba(5,6,8,0.3) 50%, rgba(5,6,8,0.9) 100%)',
-              zIndex: 1,
-            }}
-          />
-        </div>
-      )}
-
-      {/* GPS Error & Offline Banners */}
-      <AnimatePresence>
-        {gpsError && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            style={{
-              position: 'absolute',
-              top: '72px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: 10002,
-              background: 'rgba(244, 63, 94, 0.9)',
-              color: '#ffffff',
-              padding: '8px 16px',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '12px',
-              fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <AlertTriangle size={14} /> {gpsError}
-          </motion.div>
-        )}
-        {pendingLapCount > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            style={{
-              position: 'absolute',
-              top: gpsError ? '110px' : '72px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: 10002,
-              background: 'rgba(245, 158, 11, 0.9)',
-              color: '#050608',
-              padding: '6px 14px',
-              borderRadius: 'var(--radius-sm)',
               fontSize: '11px',
-              fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
+              padding: '3px 8px',
+              borderRadius: 'var(--radius-xs)',
+              background: 'rgba(255, 255, 255, 0.08)',
+              color: 'var(--text-secondary)',
+              fontWeight: 600,
             }}
           >
-            <WifiOff size={13} /> {pendingLapCount} okrążeń w pamięci offline
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* F1 5-Red-Light Countdown Screen */}
-      {phase === 'f1_lights' && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#000000',
-            zIndex: 10,
-            padding: '24px',
-          }}
-        >
-          <div
+            {vehicleType === 'scooter' ? 'Hulajnoga' : 'Rower'}
+          </span>
+          <span
+            className="font-digital"
             style={{
-              display: 'flex',
-              gap: 'clamp(6px, 2vw, 16px)',
-              background: '#090b10',
-              padding: 'clamp(12px, 3vw, 28px)',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.9)',
+              fontSize: '12px',
+              padding: '3px 8px',
+              borderRadius: 'var(--radius-xs)',
+              background: 'var(--accent-green-bg)',
+              color: 'var(--accent-green)',
+              fontWeight: 700,
             }}
           >
-            {[1, 2, 3, 4, 5].map((i) => {
-              const active = !isLightsOut && lights >= i;
-              return (
-                <div
-                  key={i}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 'clamp(6px, 1.5vw, 10px)',
-                    padding: 'clamp(6px, 1.5vw, 12px)',
-                    background: '#050608',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid rgba(255,255,255,0.05)',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 'clamp(28px, 8vw, 48px)',
-                      height: 'clamp(28px, 8vw, 48px)',
-                      borderRadius: '50%',
-                      background: active ? '#f43f5e' : '#151922',
-                      boxShadow: active
-                        ? '0 0 35px #f43f5e, inset 0 0 10px rgba(255,255,255,0.6)'
-                        : 'none',
-                      transition: 'all 0.1s ease',
-                    }}
-                  />
-                  <div
-                    style={{
-                      width: 'clamp(28px, 8vw, 48px)',
-                      height: 'clamp(28px, 8vw, 48px)',
-                      borderRadius: '50%',
-                      background: active ? '#f43f5e' : '#151922',
-                      boxShadow: active
-                        ? '0 0 35px #f43f5e, inset 0 0 10px rgba(255,255,255,0.6)'
-                        : 'none',
-                      transition: 'all 0.1s ease',
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
-
-          <h1
-            style={{
-              marginTop: '36px',
-              color: isLightsOut ? 'var(--f1-green)' : '#ffffff',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 'clamp(22px, 5vw, 42px)',
-              fontWeight: 900,
-              letterSpacing: '0.04em',
-              textAlign: 'center',
-              textShadow: isLightsOut ? '0 0 30px var(--f1-green)' : 'none',
-            }}
-          >
-            {isLightsOut ? 'LIGHTS OUT AND AWAY WE GO!' : 'CZEKAJ NA ZGASZENIE ŚWIATEŁ...'}
-          </h1>
+            Okrążenie {lapNumberDisplay}
+          </span>
+          {isSimulated && (
+            <span
+              style={{
+                fontSize: '11px',
+                padding: '3px 8px',
+                borderRadius: 'var(--radius-xs)',
+                background: 'rgba(245, 158, 11, 0.15)',
+                color: 'var(--accent-amber)',
+                fontWeight: 600,
+              }}
+            >
+              Symulator
+            </span>
+          )}
         </div>
-      )}
 
-      {/* Lap Finish Flash Banner */}
-      <AnimatePresence>
-        {lapFlash && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.15 }}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'rgba(0, 230, 118, 0.18)',
-              backdropFilter: 'blur(8px)',
-              zIndex: 10001,
-              pointerEvents: 'none',
-            }}
-          >
-            <div
-              style={{
-                fontSize: 'clamp(64px, 14vw, 120px)',
-                color: '#ffffff',
-                textShadow: '0 0 45px var(--f1-green)',
-                fontWeight: 900,
-                fontFamily: 'var(--font-mono)',
-                lineHeight: 1,
-              }}
-            >
-              LAP COMPLETED
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Main OLED HUD */}
-      {phase === 'racing' && (
-        <div
-          style={{
-            zIndex: 10,
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            justifyContent: 'space-between',
-          }}
-        >
-          {/* Top Control Bar */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '16px 20px',
-              gap: '12px',
-            }}
-          >
-            {/* Driver Pill */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '6px 14px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'rgba(0, 0, 0, 0.65)',
-                  border: '1px solid var(--border-subtle)',
-                  backdropFilter: 'blur(16px)',
-                }}
-              >
-                <span
-                  style={{
-                    color: 'var(--f1-green)',
-                    fontWeight: 900,
-                    fontSize: 'clamp(16px, 3.5vw, 20px)',
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  {driverName}
-                </span>
-                <span
-                  style={{
-                    padding: '2px 8px',
-                    borderRadius: 'var(--radius-xs)',
-                    background: 'rgba(255,255,255,0.08)',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  {vehicleType}
-                </span>
-                <span
-                  style={{
-                    padding: '2px 8px',
-                    borderRadius: 'var(--radius-xs)',
-                    background: 'rgba(0, 240, 255, 0.12)',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    color: 'var(--f1-cyan)',
-                  }}
-                  className="font-digital"
-                >
-                  LAP {lapNumberDisplay}
-                </span>
-                {isSimulated && (
-                  <span
-                    style={{
-                      padding: '2px 8px',
-                      borderRadius: 'var(--radius-xs)',
-                      background: 'rgba(244, 63, 94, 0.15)',
-                      color: 'var(--f1-red)',
-                      fontSize: '10px',
-                      fontWeight: 800,
-                    }}
-                  >
-                    SIM 45KM/H
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Action Controls */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                className="btn-secondary"
-                style={{
-                  padding: '8px 12px',
-                  fontSize: '11px',
-                  background: 'rgba(0,0,0,0.6)',
-                  backdropFilter: 'blur(10px)',
-                }}
-                onClick={() => setLabelsVisible(!labelsVisible)}
-                title="Przełącz nazwy ulic"
-              >
-                <MapPin size={13} />
-              </button>
-
-              <button
-                className="btn-secondary"
-                style={{
-                  padding: '8px 12px',
-                  fontSize: '11px',
-                  background: 'rgba(0,0,0,0.6)',
-                  backdropFilter: 'blur(10px)',
-                }}
-                onClick={toggleFullscreen}
-                title="Tryb pełnoekranowy"
-              >
-                {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-              </button>
-
-              {/* Hold-to-abort Safety Button */}
-              <button
-                className="btn-danger"
-                onPointerDown={startExitHold}
-                onPointerUp={cancelExitHold}
-                onPointerLeave={cancelExitHold}
-                onPointerCancel={cancelExitHold}
-                style={{
-                  position: 'relative',
-                  overflow: 'hidden',
-                  padding: '10px 18px',
-                  minHeight: '42px',
-                  background: 'rgba(244, 63, 94, 0.15)',
-                  border: '1px solid var(--f1-red)',
-                  color: '#ffffff',
-                  touchAction: 'none',
-                  userSelect: 'none',
-                  fontSize: '12px',
-                  fontWeight: 900,
-                  borderRadius: 'var(--radius-sm)',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    bottom: 0,
-                    width: `${exitHoldProgress * 100}%`,
-                    background: 'var(--f1-red)',
-                    opacity: 0.6,
-                    transition: exitHoldProgress === 0 ? 'width 0.15s ease-out' : 'none',
-                  }}
-                />
-                <span style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <RotateCcw size={13} /> PRZYTRZYMAJ ABY ZAKOŃCZYĆ
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Central Telemetry Section */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '8px 16px',
-            }}
-          >
-            {/* Live Lap Time Banner */}
-            <div
-              style={{
-                background: 'rgba(9, 12, 18, 0.75)',
-                border: '1px solid rgba(0, 240, 255, 0.35)',
-                borderRadius: 'var(--radius-md)',
-                padding: '6px 28px',
-                textAlign: 'center',
-                marginBottom: '8px',
-                backdropFilter: 'blur(20px)',
-                boxShadow: '0 8px 30px rgba(0, 240, 255, 0.15)',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: '10px',
-                  color: 'var(--f1-cyan)',
-                  fontWeight: 800,
-                  letterSpacing: '0.12em',
-                }}
-              >
-                LIVE LAP TIME
-              </div>
-              <div
-                ref={liveTimerRef}
-                className="font-digital cockpit-metric-value"
-                style={{
-                  fontSize: 'clamp(32px, 7vw, 48px)',
-                  color: '#ffffff',
-                  fontWeight: 800,
-                  textShadow: '0 0 20px rgba(255,255,255,0.4)',
-                  lineHeight: 1.1,
-                }}
-              >
-                0.000
-              </div>
-            </div>
-
-            {/* Live Ghost Delta */}
-            <div
-              ref={deltaElRef}
-              className="font-digital"
-              style={{
-                fontSize: 'clamp(20px, 4.5vw, 32px)',
-                height: '36px',
-                fontWeight: 800,
-                letterSpacing: '-0.02em',
-                textShadow: '0 0 12px currentColor',
-              }}
-            >
-              DELTA --.--
-            </div>
-
-            {/* Main Speed Readout */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'baseline',
-                justifyContent: 'center',
-                margin: '10px 0',
-              }}
-            >
-              <div
-                ref={speedElRef}
-                className="font-digital cockpit-metric-value"
-                style={{
-                  fontSize: 'clamp(100px, 24vw, 180px)',
-                  color: '#ffffff',
-                  fontWeight: 800,
-                  lineHeight: 0.9,
-                  textShadow: '0 0 30px rgba(0, 240, 255, 0.25)',
-                }}
-              >
-                0
-              </div>
-              <div
-                className="cockpit-unit"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontSize: 'clamp(18px, 4vw, 30px)',
-                  fontWeight: 800,
-                  marginLeft: '12px',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                KM/H
-              </div>
-            </div>
-
-            {/* Motorsport Dual Gauge: Friction Circle & Lean Horizon */}
-            <div
+        {/* Quick controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {pendingLapCount > 0 && (
+            <span
+              title="Okrążenia oczekujące na wysłanie"
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '24px',
-                background: 'rgba(5, 7, 12, 0.75)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-lg)',
-                padding: '12px 20px',
-                backdropFilter: 'blur(20px)',
+                gap: '4px',
+                fontSize: '11px',
+                color: 'var(--accent-amber)',
               }}
             >
-              {/* Friction Circle (G-G Diagram) */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <svg width="64" height="64" viewBox="0 0 80 80">
-                  <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
-                  <circle cx="40" cy="40" r="16" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
-                  <line x1="8" y1="40" x2="72" y2="40" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-                  <line x1="40" y1="8" x2="40" y2="72" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-                  <circle
-                    ref={gForceDotRef}
-                    cx="40"
-                    cy="40"
-                    r="5"
-                    fill="var(--f1-cyan)"
-                    style={{
-                      filter: 'drop-shadow(0 0 6px var(--f1-cyan))',
-                      transition: 'cx 0.08s ease-out, cy 0.08s ease-out',
-                    }}
-                  />
-                </svg>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '9px', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
-                    G-FORCE
-                  </span>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-main)' }}>
-                    FRICTION CIRCLE
-                  </span>
-                </div>
-              </div>
+              <WifiOff size={13} /> {pendingLapCount}
+            </span>
+          )}
 
-              <div style={{ width: '1px', height: '40px', background: 'var(--border-subtle)' }} />
+          <button
+            className="btn-secondary"
+            style={{ padding: '7px 12px', fontSize: '12px' }}
+            onClick={() => setShowMap(!showMap)}
+          >
+            <MapPin size={13} />
+            <span>{showMap ? 'Ukryj mapę' : 'Mapa'}</span>
+          </button>
 
-              {/* Lean Horizon Angle */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div
-                  style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '50%',
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transform: `rotate(${leanAngleDisplay}deg)`,
-                    transition: 'transform 0.15s ease-out',
-                  }}
-                >
-                  <Compass size={22} color="var(--f1-cyan)" />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '9px', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
-                    LEAN ANGLE
-                  </span>
-                  <span
-                    className="font-digital"
-                    style={{ fontSize: '14px', fontWeight: 800, color: 'var(--f1-cyan)' }}
-                  >
-                    {Math.abs(leanAngleDisplay)}°{' '}
-                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-                      {leanAngleDisplay > 4 ? 'RIGHT' : leanAngleDisplay < -4 ? 'LEFT' : 'CENTER'}
-                    </span>
-                  </span>
-                </div>
-              </div>
+          <button
+            className="btn-secondary"
+            style={{ padding: '7px 10px' }}
+            onClick={toggleFullscreen}
+            aria-label="Pełny ekran"
+          >
+            {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+
+          <motion.button
+            whileTap={{ scale: 0.96 }}
+            className="btn-danger"
+            onClick={stopRace}
+            style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 700 }}
+          >
+            <Square size={13} fill="currentColor" />
+            <span>Zakończ</span>
+          </motion.button>
+        </div>
+      </div>
+
+      {/* GPS Warning */}
+      <AnimatePresence>
+        {gpsError && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            style={{
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--accent-red-bg)',
+              border: '1px solid rgba(244, 63, 94, 0.3)',
+              color: 'var(--accent-red)',
+              fontSize: '12px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <AlertCircle size={14} /> {gpsError}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Lap finished alert */}
+      <AnimatePresence>
+        {lastCompletedLapTime !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            style={{
+              padding: '12px 18px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--accent-green-bg)',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              color: 'var(--accent-green)',
+              textAlign: 'center',
+              fontWeight: 700,
+              fontSize: '14px',
+            }}
+          >
+            Ukończono okrążenie: {(lastCompletedLapTime / 1000).toFixed(3)}s
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Center Speed & Timer Hero */}
+      <div
+        className="clean-card"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '36px 20px',
+          textAlign: 'center',
+        }}
+      >
+        {/* Speedometer */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+          <div
+            ref={speedElRef}
+            className="font-digital cockpit-metric-value"
+            style={{
+              fontSize: 'clamp(84px, 20vw, 150px)',
+              fontWeight: 800,
+              lineHeight: 0.9,
+              letterSpacing: '-0.04em',
+            }}
+          >
+            0
+          </div>
+          <span style={{ fontSize: '18px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            km/h
+          </span>
+        </div>
+
+        {/* Live Lap Time & Delta */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            marginTop: '20px',
+            paddingTop: '16px',
+            borderTop: '1px solid var(--border-subtle)',
+            width: '100%',
+            justifyContent: 'center',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+              Czas okrążenia
+            </div>
+            <div
+              ref={liveTimerRef}
+              className="font-digital"
+              style={{ fontSize: '28px', fontWeight: 800, color: '#ffffff' }}
+            >
+              0.00
             </div>
           </div>
 
-          {/* F1 Sector Timing Tower (Bottom HUD) */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr',
-              gap: '6px',
-              padding: '12px 16px',
-              background: 'rgba(5, 7, 12, 0.85)',
-              borderTop: '1px solid var(--border-subtle)',
-              backdropFilter: 'blur(24px)',
-            }}
-          >
-            {/* Sector 1 */}
-            <div
-              className={`sector-badge ${getSectorClass(s1Time, sectorStats.personalS1, sectorStats.overallS1)}`}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                padding: '10px 8px',
-                borderRadius: 'var(--radius-sm)',
-                textAlign: 'center',
-              }}
-            >
-              <div style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '0.06em', opacity: 0.8 }}>
-                SEKTOR 1
-              </div>
-              <div className="font-digital" style={{ fontSize: 'clamp(18px, 4.5vw, 26px)', fontWeight: 800, marginTop: '2px' }}>
-                {s1Time ? (s1Time / 1000).toFixed(3) : '--.---'}
-              </div>
-            </div>
+          <div style={{ width: '1px', height: '32px', background: 'var(--border-subtle)' }} />
 
-            {/* Sector 2 */}
-            <div
-              className={`sector-badge ${getSectorClass(s2Time, sectorStats.personalS2, sectorStats.overallS2)}`}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                padding: '10px 8px',
-                borderRadius: 'var(--radius-sm)',
-                textAlign: 'center',
-              }}
-            >
-              <div style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '0.06em', opacity: 0.8 }}>
-                SEKTOR 2
-              </div>
-              <div className="font-digital" style={{ fontSize: 'clamp(18px, 4.5vw, 26px)', fontWeight: 800, marginTop: '2px' }}>
-                {s2Time ? (s2Time / 1000).toFixed(3) : '--.---'}
-              </div>
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+              Różnica (Delta)
             </div>
-
-            {/* Sector 3 (Lap) */}
             <div
-              className={`sector-badge ${getSectorClass(s3Time, sectorStats.personalS3, sectorStats.overallS3)}`}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                padding: '10px 8px',
-                borderRadius: 'var(--radius-sm)',
-                textAlign: 'center',
-              }}
+              ref={deltaElRef}
+              className="font-digital"
+              style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-muted)' }}
             >
-              <div style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '0.06em', opacity: 0.8 }}>
-                SEKTOR 3 (FINISH)
-              </div>
-              <div className="font-digital" style={{ fontSize: 'clamp(18px, 4.5vw, 26px)', fontWeight: 800, marginTop: '2px' }}>
-                {s3Time ? (s3Time / 1000).toFixed(3) : '--.---'}
-              </div>
+              --.--
             </div>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Sectors Breakdown */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '12px',
+        }}
+      >
+        <div className="clean-card" style={{ padding: '14px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            Sektor 1
+          </div>
+          <div
+            className={`font-digital sector-badge ${getSectorClass(
+              s1Time,
+              sectorStats.personalS1,
+              sectorStats.overallS1
+            )}`}
+            style={{ fontSize: '16px', marginTop: '6px', width: '100%' }}
+          >
+            {s1Time ? `${(s1Time / 1000).toFixed(3)}s` : '--.---'}
+          </div>
+        </div>
+
+        <div className="clean-card" style={{ padding: '14px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            Sektor 2
+          </div>
+          <div
+            className={`font-digital sector-badge ${getSectorClass(
+              s2Time,
+              sectorStats.personalS2,
+              sectorStats.overallS2
+            )}`}
+            style={{ fontSize: '16px', marginTop: '6px', width: '100%' }}
+          >
+            {s2Time ? `${(s2Time / 1000).toFixed(3)}s` : '--.---'}
+          </div>
+        </div>
+
+        <div className="clean-card" style={{ padding: '14px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            Sektor 3
+          </div>
+          <div
+            className={`font-digital sector-badge ${getSectorClass(
+              s3Time,
+              sectorStats.personalS3,
+              sectorStats.overallS3
+            )}`}
+            style={{ fontSize: '16px', marginTop: '6px', width: '100%' }}
+          >
+            {s3Time ? `${(s3Time / 1000).toFixed(3)}s` : '--.---'}
+          </div>
+        </div>
+      </div>
+
+      {/* Map View (Toggleable) */}
+      <AnimatePresence>
+        {showMap && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: '320px' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="clean-card"
+            style={{ overflow: 'hidden', padding: 0 }}
+          >
+            <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

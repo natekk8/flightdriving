@@ -1,23 +1,21 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 // @ts-ignore
 import { api } from '../../convex/_generated/api';
 import L from 'leaflet';
 import 'leaflet-rotate';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 import { calculateTrackCorners } from '../lib/math';
 import { CompareModal } from '../components/RaceControl/CompareModal';
 import { TrainingModal } from '../components/RaceControl/TrainingModal';
 import {
-  Radio,
   Download,
   Flame,
   GitCompare,
   Target,
-  Activity,
-  Zap,
   Clock,
+  Activity,
 } from 'lucide-react';
 
 function buildMonotonicSpline(pts: { x: number; y: number }[]) {
@@ -41,14 +39,9 @@ export default function RaceControl() {
   const [activeTab, setActiveTab] = useState<'scooter' | 'bike'>('scooter');
   const [selectedTrack, setSelectedTrack] = useState(location.state?.trackId || '');
   const [focusedDriver, setFocusedDriver] = useState<string | null>(null);
-  const [notification, setNotification] = useState<{
-    id: number;
-    text: string;
-    driverName: string;
-  } | null>(null);
 
-  // Feature States
-  const [showHeatmap, setShowHeatmap] = useState(true);
+  // Modals
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showTrainingModal, setShowTrainingModal] = useState(false);
   const [compareDriverA, setCompareDriverA] = useState<string>('');
@@ -57,8 +50,6 @@ export default function RaceControl() {
   const [trainingLapAId, setTrainingLapAId] = useState<string>('');
   const [trainingLapBId, setTrainingLapBId] = useState<string>('');
   const [viewMode, setViewMode] = useState<'leaderboard' | 'all'>('leaderboard');
-
-  const seenDriversRef = useRef<Set<string>>(new Set());
 
   // @ts-ignore
   const resequenceLapsMutation = useMutation(api.laps.resequenceLaps);
@@ -87,13 +78,7 @@ export default function RaceControl() {
   }>({});
   const rafRef = useRef<number | null>(null);
 
-  // Focus Panel Map
-  const focusMapRef = useRef<HTMLDivElement>(null);
-  const focusLeafletMap = useRef<L.Map | null>(null);
-  const focusMarkerRef = useRef<L.Marker | null>(null);
-  const focusRafRef = useRef<number | null>(null);
-
-  // Ideal Lap (Theoretical Best)
+  // Theoretical best
   const idealLapData = useMemo(() => {
     const validS1 = laps
       .map((l: any) => l.s1)
@@ -120,7 +105,7 @@ export default function RaceControl() {
     }
   }, [tracks, selectedTrack]);
 
-  // Initialize Global Map
+  // Initialize Map
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
 
@@ -143,157 +128,106 @@ export default function RaceControl() {
     };
   }, []);
 
-  // Update target positions from live Telemetry
+  // Update track path on map
+  useEffect(() => {
+    if (!leafletMap.current || !selectedTrack) return;
+    const track = tracks.find((t: any) => t._id === selectedTrack);
+    if (!track || !track.path || track.path.length < 2) return;
+
+    const latLngs: [number, number][] = track.path.map((p: any) => [p.lat, p.lon]);
+    const bounds = L.latLngBounds(latLngs);
+    leafletMap.current.fitBounds(bounds, { padding: [30, 30] });
+
+    const trackLine = L.polyline(latLngs, {
+      color: 'var(--accent-green)',
+      weight: 4,
+      opacity: 0.8,
+    }).addTo(leafletMap.current);
+
+    return () => {
+      trackLine.remove();
+    };
+  }, [selectedTrack, tracks]);
+
+  // Interpolated driver markers on map
   useEffect(() => {
     if (!leafletMap.current) return;
-    const now = Date.now();
-    const activeTelemetry = telemetry.filter(
-      (t: any) => t.vehicleType === activeTab && now - (t.timestamp || 0) < 15000
+
+    const activeDrivers = telemetry.filter(
+      (t: any) => t.vehicleType === activeTab && Date.now() - (t.timestamp || 0) < 15000
     );
 
-    // Notifications for joining session
-    activeTelemetry.forEach((t: any) => {
-      if (!seenDriversRef.current.has(t.driverName)) {
-        seenDriversRef.current.add(t.driverName);
-        setNotification({
-          id: Date.now(),
-          text: `Dołącza do sesji (Live)`,
-          driverName: t.driverName,
-        });
-        setTimeout(() => setNotification(null), 4500);
+    const currentDriverNames = new Set(activeDrivers.map((t: any) => t.driverName));
+    Object.keys(markersRef.current).forEach((driverName) => {
+      if (!currentDriverNames.has(driverName)) {
+        markersRef.current[driverName].marker.remove();
+        delete markersRef.current[driverName];
       }
     });
 
-    activeTelemetry.forEach((t: any) => {
-      const heading = t.heading || 0;
-      const html = `
-        <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-50%);pointer-events:none;">
-          <div style="background: rgba(5,7,12,0.92); border: 1.5px solid var(--f1-cyan); border-radius: 6px; padding: 3px 8px; color: white; font-size: 11px; font-weight: 800; white-space: nowrap; box-shadow: 0 0 12px rgba(0,240,255,0.35); font-family: var(--font-mono);">
-            <strong style="color: var(--f1-cyan)">${t.driverName}</strong> · ${Math.round(t.speed)} km/h
-          </div>
-          <div style="width: 14px; height: 14px; margin-top: 2px; transform: rotate(${heading}deg); display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 0 8px var(--f1-cyan));">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--f1-cyan)">
-              <polygon points="12,2 22,22 12,17 2,22" />
-            </svg>
-          </div>
-        </div>
-      `;
-      const icon = L.divIcon({ html, className: '', iconSize: [120, 48] });
-      const targetLatLng = L.latLng(t.lat, t.lon);
+    activeDrivers.forEach((driver: any) => {
+      const targetLatLng = L.latLng(driver.lat, driver.lon);
+      const heading = driver.heading || 0;
 
-      if (markersRef.current[t._id]) {
-        markersRef.current[t._id].target = targetLatLng;
-        markersRef.current[t._id].heading = heading;
-        markersRef.current[t._id].marker.setIcon(icon);
-      } else {
+      if (!markersRef.current[driver.driverName]) {
+        const arrowSvg = `<svg width="22" height="22" viewBox="0 0 24 24" style="transform: rotate(${heading}deg); transform-origin: center;">
+          <polygon points="12,2 22,22 12,17 2,22" fill="var(--accent-green)" stroke="#ffffff" stroke-width="2"/>
+        </svg>`;
+        const icon = L.divIcon({
+          html: `<div style="display:flex;flex-direction:column;align-items:center;">
+            ${arrowSvg}
+            <span style="font-size:9px;font-weight:700;color:#ffffff;background:rgba(9,10,15,0.8);padding:1px 4px;border-radius:3px;margin-top:2px;">
+              ${driver.driverName}
+            </span>
+          </div>`,
+          className: '',
+          iconSize: [40, 40],
+          iconAnchor: [20, 11],
+        });
+
         const marker = L.marker(targetLatLng, { icon }).addTo(leafletMap.current!);
-        markersRef.current[t._id] = {
+        markersRef.current[driver.driverName] = {
           marker,
           target: targetLatLng,
           current: targetLatLng,
           heading,
         };
+      } else {
+        markersRef.current[driver.driverName].target = targetLatLng;
+        markersRef.current[driver.driverName].heading = heading;
       }
     });
 
-    const currentIds = activeTelemetry.map((t: any) => t._id);
-    Object.keys(markersRef.current).forEach((id) => {
-      if (!currentIds.includes(id)) {
-        leafletMap.current?.removeLayer(markersRef.current[id].marker);
-        delete markersRef.current[id];
-      }
-    });
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const animateMarkers = () => {
+      Object.keys(markersRef.current).forEach((driverName) => {
+        const item = markersRef.current[driverName];
+        const curLat = item.current.lat + (item.target.lat - item.current.lat) * 0.15;
+        const curLng = item.current.lng + (item.target.lng - item.current.lng) * 0.15;
+        item.current = L.latLng(curLat, curLng);
+        item.marker.setLatLng(item.current);
+
+        const el = item.marker.getElement();
+        const svg = el?.querySelector('svg');
+        if (svg) {
+          svg.style.transform = `rotate(${item.heading}deg)`;
+        }
+      });
+      rafRef.current = requestAnimationFrame(animateMarkers);
+    };
+    rafRef.current = requestAnimationFrame(animateMarkers);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, [telemetry, activeTab]);
 
-  // 60FPS Lerp Interpolation Loop for map markers
-  useEffect(() => {
-    const LERP = 0.12;
-    const renderLoop = () => {
-      Object.values(markersRef.current).forEach(({ marker, target, current }) => {
-        const dLat = target.lat - current.lat;
-        const dLng = target.lng - current.lng;
-        current.lat += dLat * LERP;
-        current.lng += dLng * LERP;
-        marker.setLatLng(current);
-      });
-      rafRef.current = requestAnimationFrame(renderLoop);
-    };
-    rafRef.current = requestAnimationFrame(renderLoop);
-    return () => cancelAnimationFrame(rafRef.current!);
-  }, []);
+  // Sorted laps
+  const sortedLaps = useMemo(() => {
+    return [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime);
+  }, [laps]);
 
-  // Initialize and update Focus Map
-  useEffect(() => {
-    if (!focusedDriver || !focusMapRef.current) {
-      if (focusLeafletMap.current) {
-        focusLeafletMap.current.remove();
-        focusLeafletMap.current = null;
-        focusMarkerRef.current = null;
-      }
-      return;
-    }
-
-    if (!focusLeafletMap.current) {
-      // @ts-ignore
-      focusLeafletMap.current = L.map(focusMapRef.current, {
-        zoomControl: false,
-        rotate: true,
-        touchRotate: true,
-      } as any).setView([51.95, 20.15], 18);
-
-      L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=pl&x={x}&y={y}&z={z}', {
-        maxZoom: 24,
-        maxNativeZoom: 21,
-        className: 'map-tiles-dark',
-      }).addTo(focusLeafletMap.current);
-
-      const html = `<div style="width:20px;height:20px;background:var(--f1-green);border-radius:50%;border:3px solid white;box-shadow:0 0 16px var(--f1-green);"></div>`;
-      const icon = L.divIcon({ html, className: '', iconSize: [20, 20] });
-      focusMarkerRef.current = L.marker([51.95, 20.15], { icon }).addTo(focusLeafletMap.current);
-    }
-
-    const resizeTimer = setTimeout(() => {
-      focusLeafletMap.current?.invalidateSize();
-    }, 280);
-    return () => clearTimeout(resizeTimer);
-  }, [focusedDriver]);
-
-  const focusedTelemetry = telemetry.find(
-    (t: any) => t.driverName === focusedDriver && t.vehicleType === activeTab
-  );
-  const focusedLapData = laps.find((l: any) => l.driverName === focusedDriver) || {};
-
-  useEffect(() => {
-    if (!focusedDriver || !focusLeafletMap.current || !focusMarkerRef.current) return;
-
-    let target = L.latLng(51.95, 20.15);
-    if (focusedTelemetry) target = L.latLng(focusedTelemetry.lat, focusedTelemetry.lon);
-
-    const current = focusMarkerRef.current.getLatLng();
-
-    const renderLoop = () => {
-      const LERP = 0.12;
-      const dLat = target.lat - current.lat;
-      const dLng = target.lng - current.lng;
-      current.lat += dLat * LERP;
-      current.lng += dLng * LERP;
-
-      if (focusMarkerRef.current && focusLeafletMap.current) {
-        focusMarkerRef.current.setLatLng(current);
-        focusLeafletMap.current.panTo(current, { animate: false });
-      }
-      focusRafRef.current = requestAnimationFrame(renderLoop);
-    };
-
-    focusRafRef.current = requestAnimationFrame(renderLoop);
-    return () => cancelAnimationFrame(focusRafRef.current!);
-  }, [focusedTelemetry, focusedDriver]);
-
-  const sortedLaps = useMemo(
-    () => [...laps].sort((a: any, b: any) => a.lapTime - b.lapTime),
-    [laps]
-  );
-  const bestLap = sortedLaps[0];
+  const bestLap = sortedLaps.length > 0 ? sortedLaps[0] : null;
 
   const uniqueDrivers = useMemo(() => {
     const driverMap = new Map<string, any>();
@@ -336,16 +270,21 @@ export default function RaceControl() {
   }, [viewMode, uniqueDrivers, sortedLaps]);
 
   const sectorStats = useMemo(() => {
-    const allS1 = laps.map((l: any) => l.s1).filter((v: any): v is number => typeof v === 'number' && v > 0);
-    const allS2 = laps.map((l: any) => l.s2).filter((v: any): v is number => typeof v === 'number' && v > 0);
-    const allS3 = laps.map((l: any) => l.s3).filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const allS1 = laps
+      .map((l: any) => l.s1)
+      .filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const allS2 = laps
+      .map((l: any) => l.s2)
+      .filter((v: any): v is number => typeof v === 'number' && v > 0);
+    const allS3 = laps
+      .map((l: any) => l.s3)
+      .filter((v: any): v is number => typeof v === 'number' && v > 0);
 
     const overallS1 = allS1.length > 0 ? Math.min(...allS1) : null;
     const overallS2 = allS2.length > 0 ? Math.min(...allS2) : null;
     const overallS3 = allS3.length > 0 ? Math.min(...allS3) : null;
 
     const personalMap = new Map<string, { s1: number | null; s2: number | null; s3: number | null }>();
-
     laps.forEach((l: any) => {
       const name = l.driverName;
       if (!personalMap.has(name)) {
@@ -377,14 +316,6 @@ export default function RaceControl() {
   const activeDriverTelemetry =
     activeTelemetryNow.find((t: any) => t.driverName === bestLap?.driverName) ||
     activeTelemetryNow[0];
-  const inProgressDrivers = activeTelemetryNow.filter(
-    (t: any) => !sortedLaps.some((l: any) => l.driverName === t.driverName)
-  );
-
-  const selectedTrackTelemetry = useMemo(
-    () => telemetry.find((t: any) => t.trackId === selectedTrack),
-    [telemetry, selectedTrack]
-  );
 
   // Heatmap rendering
   useEffect(() => {
@@ -402,38 +333,36 @@ export default function RaceControl() {
     const path = track.path;
     const corners = calculateTrackCorners(path);
     const cornerIndices = new Set(corners.map((c: any) => c.index));
-    const liveGForce = selectedTrackTelemetry?.gForce || 0;
 
     for (let i = 0; i < path.length - 1; i++) {
       const p1 = path[i];
       const p2 = path[i + 1];
 
-      let color = 'var(--f1-green)';
-      let label = '🟢 Pełne Przyspieszenie';
+      let color = 'var(--accent-green)';
+      let label = 'Prosta';
 
       const isApproachingCorner = corners.some((c: any) => i >= c.index - 3 && i < c.index);
       const isAtApex = cornerIndices.has(i) || corners.some((c: any) => i === c.index);
 
-      if (liveGForce < -0.25 || isApproachingCorner) {
-        color = 'var(--f1-red)';
-        label = '🔴 Strefa Hamowania';
+      if (isApproachingCorner) {
+        color = 'var(--accent-red)';
+        label = 'Hamowanie';
       } else if (isAtApex) {
-        color = 'var(--f1-yellow)';
-        label = '🟡 Apex Zakrętu';
+        color = 'var(--accent-amber)';
+        label = 'Zakręt';
       }
 
       const segment = L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
         color,
-        weight: 6,
-        opacity: 0.88,
-        lineCap: 'round',
+        weight: 5,
+        opacity: 0.85,
       });
       segment.bindTooltip(label, { sticky: true });
       segment.addTo(heatmapLayerGroup.current);
     }
-  }, [showHeatmap, selectedTrack, tracks, selectedTrackTelemetry?.gForce]);
+  }, [showHeatmap, selectedTrack, tracks]);
 
-  // Export session data
+  // Export session
   const exportSession = useCallback(
     (format: 'csv' | 'json') => {
       if (format === 'json') {
@@ -442,7 +371,7 @@ export default function RaceControl() {
           encodeURIComponent(
             JSON.stringify(
               {
-                track: tracks.find((t: any) => t._id === selectedTrack)?.name || 'Unknown',
+                track: tracks.find((t: any) => t._id === selectedTrack)?.name || 'Nieznany',
                 vehicleType: activeTab,
                 laps,
                 exportedAt: new Date().toISOString(),
@@ -472,7 +401,7 @@ export default function RaceControl() {
         const rows = laps.map((l: any, i: number) => [
           i + 1,
           l.driverName,
-          l.vehicleType || activeTab,
+          l.vehicleType === 'scooter' ? 'Hulajnoga' : 'Rower',
           l.lapNumber || 1,
           (l.lapTime / 1000).toFixed(3),
           l.s1 ? (l.s1 / 1000).toFixed(3) : '',
@@ -495,188 +424,179 @@ export default function RaceControl() {
   );
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', position: 'relative' }}>
-      {/* Animated Driver Join Banner */}
-      <AnimatePresence>
-        {notification && (
-          <motion.div
-            key={notification.id}
-            initial={{ opacity: 0, y: -40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            style={{
-              position: 'fixed',
-              top: '80px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              background: 'rgba(5, 7, 12, 0.92)',
-              backdropFilter: 'blur(16px)',
-              border: '1px solid var(--f1-green)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '12px 24px',
-              zIndex: 99999,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '14px',
-              boxShadow: '0 16px 40px rgba(0, 230, 118, 0.25)',
-            }}
-          >
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                background: 'rgba(0, 230, 118, 0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--f1-green)',
-              }}
-            >
-              <Zap size={18} />
-            </div>
-            <div>
-              <div style={{ color: '#ffffff', fontWeight: 900, fontSize: '15px' }}>
-                {notification.driverName}
-              </div>
-              <div style={{ color: 'var(--f1-green)', fontSize: '11px', textTransform: 'uppercase', fontWeight: 800 }}>
-                {notification.text}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+    <div
+      style={{
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: '24px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px',
+      }}
+    >
       {/* Top Filter and Command Bar */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="telemetry-card"
+      <div
+        className="clean-card"
         style={{
-          display: 'flex',
-          gap: '12px',
-          marginBottom: '20px',
           padding: '16px 20px',
-          flexWrap: 'wrap',
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
-          borderTop: '3px solid var(--f1-cyan)',
+          flexWrap: 'wrap',
+          gap: '12px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Left: Vehicle segmented control (Hulajnoga / Rower) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div
             style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '6px',
-              background: 'linear-gradient(135deg, var(--f1-cyan) 0%, #0284c7 100%)',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#050608',
+              background: 'rgba(255, 255, 255, 0.04)',
+              padding: '3px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-subtle)',
             }}
           >
-            <Radio size={16} strokeWidth={2.6} />
+            <button
+              type="button"
+              onClick={() => setActiveTab('scooter')}
+              style={{
+                position: 'relative',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: activeTab === 'scooter' ? '#ffffff' : 'var(--text-secondary)',
+                background: 'transparent',
+                borderRadius: 'calc(var(--radius-sm) - 2px)',
+                zIndex: 1,
+              }}
+            >
+              Hulajnoga
+              {activeTab === 'scooter' && (
+                <motion.div
+                  layoutId="raceControlVehicleTab"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid var(--border-medium)',
+                    borderRadius: 'calc(var(--radius-sm) - 2px)',
+                    zIndex: -1,
+                  }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('bike')}
+              style={{
+                position: 'relative',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: activeTab === 'bike' ? '#ffffff' : 'var(--text-secondary)',
+                background: 'transparent',
+                borderRadius: 'calc(var(--radius-sm) - 2px)',
+                zIndex: 1,
+              }}
+            >
+              Rower
+              {activeTab === 'bike' && (
+                <motion.div
+                  layoutId="raceControlVehicleTab"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid var(--border-medium)',
+                    borderRadius: 'calc(var(--radius-sm) - 2px)',
+                    zIndex: -1,
+                  }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                />
+              )}
+            </button>
           </div>
-          <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 900, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            RACE CONTROL PIT WALL
-          </h2>
+
+          {/* Track selector */}
+          <select
+            aria-label="Wybór toru"
+            className="custom-select"
+            style={{ minWidth: '180px', width: 'auto' }}
+            value={selectedTrack}
+            onChange={(e) => setSelectedTrack(e.target.value)}
+          >
+            <option value="">Wybierz tor...</option>
+            {tracks.map((t: any) => (
+              <option key={t._id} value={t._id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Vehicle Tab Select */}
-        <select
-          aria-label="Kategoria"
-          className="custom-select"
-          style={{ flex: '1 1 160px', width: 'auto', minWidth: '140px' }}
-          value={activeTab}
-          onChange={(e) => setActiveTab(e.target.value as any)}
-        >
-          <option value="scooter">🛴 Hulajnogi Elektryczne</option>
-          <option value="bike">🚴 Rowery Szosowe</option>
-        </select>
+        {/* Right: Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            className="btn-secondary"
+            style={{
+              padding: '7px 12px',
+              fontSize: '12px',
+              color: showHeatmap ? 'var(--accent-green)' : 'inherit',
+            }}
+            onClick={() => setShowHeatmap(!showHeatmap)}
+          >
+            <Flame size={13} />
+            <span>Mapa ciepła</span>
+          </button>
 
-        {/* Track Select */}
-        <select
-          aria-label="Wybór trasy"
-          className="custom-select"
-          style={{ flex: '1 1 200px', width: 'auto', minWidth: '160px' }}
-          value={selectedTrack}
-          onChange={(e) => setSelectedTrack(e.target.value)}
-        >
-          <option value="">-- Wybierz Tor Wyścigowy --</option>
-          {tracks.map((t: any) => (
-            <option key={t._id} value={t._id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+          <button
+            className="btn-secondary"
+            style={{
+              padding: '7px 12px',
+              fontSize: '12px',
+              color: showCompareModal ? 'var(--accent-purple)' : 'inherit',
+            }}
+            onClick={() => {
+              setShowCompareModal(!showCompareModal);
+              if (showTrainingModal) setShowTrainingModal(false);
+            }}
+          >
+            <GitCompare size={13} />
+            <span>Porównaj</span>
+          </button>
 
-        {/* Controls and Toggles */}
-        <button
-          className="btn-secondary"
-          style={{
-            flex: '1 1 140px',
-            fontSize: '11px',
-            padding: '10px 14px',
-            background: showHeatmap ? 'rgba(244, 63, 94, 0.15)' : undefined,
-            borderColor: showHeatmap ? 'var(--f1-red)' : undefined,
-            color: showHeatmap ? '#ffffff' : undefined,
-          }}
-          onClick={() => setShowHeatmap(!showHeatmap)}
-        >
-          <Flame size={14} color="var(--f1-red)" />
-          {showHeatmap ? 'HEATMAPA: WŁ' : 'HEATMAPA: WYŁ'}
-        </button>
+          <button
+            className="btn-secondary"
+            style={{
+              padding: '7px 12px',
+              fontSize: '12px',
+              color: showTrainingModal ? 'var(--accent-blue)' : 'inherit',
+            }}
+            onClick={() => {
+              setShowTrainingModal(!showTrainingModal);
+              if (showCompareModal) setShowCompareModal(false);
+            }}
+          >
+            <Target size={13} />
+            <span>Analiza</span>
+          </button>
 
-        <button
-          className="btn-secondary"
-          style={{
-            flex: '1 1 160px',
-            fontSize: '11px',
-            padding: '10px 14px',
-            background: showCompareModal ? 'rgba(189, 52, 254, 0.15)' : undefined,
-            borderColor: showCompareModal ? 'var(--f1-purple)' : undefined,
-            color: showCompareModal ? '#ffffff' : undefined,
-          }}
-          onClick={() => {
-            setShowCompareModal(!showCompareModal);
-            if (showTrainingModal) setShowTrainingModal(false);
-          }}
-        >
-          <GitCompare size={14} color="var(--f1-purple)" />
-          PORÓWNAJ KIEROWCÓW
-        </button>
+          <button
+            className="btn-secondary"
+            style={{ padding: '7px 12px', fontSize: '12px' }}
+            onClick={() => exportSession('csv')}
+            title="Eksportuj do CSV"
+          >
+            <Download size={13} />
+            <span>Eksport CSV</span>
+          </button>
+        </div>
+      </div>
 
-        <button
-          className="btn-secondary"
-          style={{
-            flex: '1 1 160px',
-            fontSize: '11px',
-            padding: '10px 14px',
-            background: showTrainingModal ? 'rgba(0, 240, 255, 0.15)' : undefined,
-            borderColor: showTrainingModal ? 'var(--f1-cyan)' : undefined,
-            color: showTrainingModal ? '#ffffff' : undefined,
-          }}
-          onClick={() => {
-            setShowTrainingModal(!showTrainingModal);
-            if (showCompareModal) setShowCompareModal(false);
-          }}
-        >
-          <Target size={14} color="var(--f1-cyan)" />
-          ANALIZA TRENINGU
-        </button>
-
-        {/* Export Data Button */}
-        <button
-          className="btn-secondary"
-          style={{ padding: '10px 14px', fontSize: '11px' }}
-          onClick={() => exportSession('csv')}
-          title="Eksportuj czasy do formatu CSV"
-        >
-          <Download size={14} /> EKSPORT CSV
-        </button>
-      </motion.div>
-
-      {/* 2-Driver Comparative Telemetry Overlay Modal */}
+      {/* Modals */}
       {showCompareModal && (
         <CompareModal
           compareDriverA={compareDriverA}
@@ -691,7 +611,6 @@ export default function RaceControl() {
         />
       )}
 
-      {/* Driver Personal Training & Corner Analysis Modal */}
       {showTrainingModal && (
         <TrainingModal
           trainingDriver={trainingDriver}
@@ -710,256 +629,259 @@ export default function RaceControl() {
         />
       )}
 
-      {/* Top Stat Cards Bento */}
+      {/* Stats Bento Grid */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: '20px',
-          marginBottom: '20px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: '16px',
         }}
       >
-        {/* P1 Leader Profile */}
-        <div className="telemetry-card">
-          <div className="card-header">
-            <h3>LIDER SESJI (P1)</h3>
+        {/* Best Lap Card */}
+        <div className="clean-card" style={{ padding: '18px' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '8px',
+            }}
+          >
+            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+              Najlepszy czas
+            </span>
             <span
               style={{
-                background: 'rgba(244, 63, 94, 0.15)',
-                color: 'var(--f1-red)',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                fontSize: '10px',
-                fontWeight: 900,
+                fontSize: '11px',
+                padding: '2px 6px',
+                borderRadius: 'var(--radius-xs)',
+                background: 'var(--accent-green-bg)',
+                color: 'var(--accent-green)',
+                fontWeight: 700,
               }}
             >
-              LIVE
+              Rekord
             </span>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span className="font-digital" style={{ fontSize: '42px', fontWeight: 900, color: '#ffffff' }}>
-              P1
-            </span>
-            <span
-              className="font-digital"
-              style={{ fontSize: '32px', fontWeight: 900, color: 'var(--f1-green)' }}
-            >
-              {bestLap ? (bestLap.lapTime / 1000).toFixed(3) : '--.---'}s
-            </span>
-          </div>
-
-          <div style={{ marginTop: '10px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              Kierowca
-            </span>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: '#ffffff' }}>
-              {bestLap ? bestLap.driverName : 'Brak Czasu'}
-            </div>
           </div>
 
           <div
+            className="font-digital"
             style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr',
-              gap: '6px',
-              marginTop: '14px',
-              paddingTop: '12px',
-              borderTop: '1px solid var(--border-subtle)',
+              fontSize: '32px',
+              fontWeight: 800,
+              color: 'var(--accent-green)',
+              lineHeight: 1.1,
             }}
           >
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>S1</div>
-              <div className="font-digital" style={{ fontSize: '13px', fontWeight: 700 }}>
-                {bestLap?.s1 ? (bestLap.s1 / 1000).toFixed(3) : '--.---'}
-              </div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>S2</div>
-              <div className="font-digital" style={{ fontSize: '13px', fontWeight: 700 }}>
-                {bestLap?.s2 ? (bestLap.s2 / 1000).toFixed(3) : '--.---'}
-              </div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>S3</div>
-              <div className="font-digital" style={{ fontSize: '13px', fontWeight: 700 }}>
-                {bestLap?.s3 ? (bestLap.s3 / 1000).toFixed(3) : '--.---'}
-              </div>
-            </div>
+            {bestLap ? `${(bestLap.lapTime / 1000).toFixed(3)}s` : '--.---'}
           </div>
+
+          <div style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', marginTop: '6px' }}>
+            {bestLap ? bestLap.driverName : 'Brak danych'}
+          </div>
+
+          {bestLap && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: '6px',
+                marginTop: '12px',
+                paddingTop: '10px',
+                borderTop: '1px solid var(--border-subtle)',
+                textAlign: 'center',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>S1</div>
+                <div className="font-digital" style={{ fontSize: '11px' }}>
+                  {bestLap.s1 ? (bestLap.s1 / 1000).toFixed(2) : '--'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>S2</div>
+                <div className="font-digital" style={{ fontSize: '11px' }}>
+                  {bestLap.s2 ? (bestLap.s2 / 1000).toFixed(2) : '--'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>S3</div>
+                <div className="font-digital" style={{ fontSize: '11px' }}>
+                  {bestLap.s3 ? (bestLap.s3 / 1000).toFixed(2) : '--'}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Theoretical Best Lap */}
-        <div className="telemetry-card">
-          <div className="card-header">
-            <h3>IDEALNY CZAS (TEORIA)</h3>
-            <span style={{ color: 'var(--f1-purple)', fontSize: '14px' }}>
-              <Clock size={16} />
+        <div className="clean-card" style={{ padding: '18px' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '8px',
+            }}
+          >
+            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+              Czas teoretyczny (S1+S2+S3)
             </span>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span
-              className="font-digital"
-              style={{ fontSize: '38px', fontWeight: 900, color: 'var(--f1-purple)' }}
-            >
-              {idealLapData.idealLapTime ? (idealLapData.idealLapTime / 1000).toFixed(3) : '--.---'}s
-            </span>
-          </div>
-
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
-            Suma najlepszych sektorów (S1+S2+S3) wszystkich kierowców w sesji.
+            <Clock size={14} style={{ color: 'var(--accent-purple)' }} />
           </div>
 
           <div
+            className="font-digital"
             style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr',
-              gap: '6px',
-              marginTop: '14px',
-              paddingTop: '12px',
-              borderTop: '1px solid var(--border-subtle)',
+              fontSize: '32px',
+              fontWeight: 800,
+              color: 'var(--accent-purple)',
+              lineHeight: 1.1,
             }}
           >
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>PURPLE S1</div>
-              <div
-                className="font-digital"
-                style={{ fontSize: '13px', fontWeight: 700, color: 'var(--f1-purple)' }}
-              >
-                {idealLapData.minS1 ? (idealLapData.minS1 / 1000).toFixed(3) : '--.---'}
-              </div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>PURPLE S2</div>
-              <div
-                className="font-digital"
-                style={{ fontSize: '13px', fontWeight: 700, color: 'var(--f1-purple)' }}
-              >
-                {idealLapData.minS2 ? (idealLapData.minS2 / 1000).toFixed(3) : '--.---'}
-              </div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>PURPLE S3</div>
-              <div
-                className="font-digital"
-                style={{ fontSize: '13px', fontWeight: 700, color: 'var(--f1-purple)' }}
-              >
-                {idealLapData.minS3 ? (idealLapData.minS3 / 1000).toFixed(3) : '--.---'}
-              </div>
-            </div>
+            {idealLapData.idealLapTime
+              ? `${(idealLapData.idealLapTime / 1000).toFixed(3)}s`
+              : '--.---'}
           </div>
+
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>
+            Suma najlepszych sektorów sesji
+          </div>
+
+          {idealLapData.idealLapTime && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: '6px',
+                marginTop: '12px',
+                paddingTop: '10px',
+                borderTop: '1px solid var(--border-subtle)',
+                textAlign: 'center',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>S1</div>
+                <div className="font-digital" style={{ fontSize: '11px', color: 'var(--accent-purple)' }}>
+                  {idealLapData.minS1 ? (idealLapData.minS1 / 1000).toFixed(2) : '--'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>S2</div>
+                <div className="font-digital" style={{ fontSize: '11px', color: 'var(--accent-purple)' }}>
+                  {idealLapData.minS2 ? (idealLapData.minS2 / 1000).toFixed(2) : '--'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>S3</div>
+                <div className="font-digital" style={{ fontSize: '11px', color: 'var(--accent-purple)' }}>
+                  {idealLapData.minS3 ? (idealLapData.minS3 / 1000).toFixed(2) : '--'}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Active Telemetry Status */}
-        <div className="telemetry-card">
-          <div className="card-header">
-            <h3>STATUS TELEMETRII</h3>
-            <span style={{ color: 'var(--f1-cyan)' }}>
-              <Activity size={16} />
+        {/* Live Telemetry Card */}
+        <div className="clean-card" style={{ padding: '18px' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '8px',
+            }}
+          >
+            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+              Aktywność na torze
             </span>
+            <Activity size={14} style={{ color: 'var(--accent-blue)' }} />
           </div>
 
-          <div>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              Aktywny kierowca {bestLap ? '(Lider)' : ''}
+          <div style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff' }}>
+            {activeDriverTelemetry ? activeDriverTelemetry.driverName : 'Brak sygnału'}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '4px' }}>
+            <span
+              className="font-digital"
+              style={{ fontSize: '36px', fontWeight: 800, color: 'var(--accent-blue)' }}
+            >
+              {activeDriverTelemetry ? Math.round(activeDriverTelemetry.speed) : 0}
             </span>
-            <div style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', marginTop: '2px' }}>
-              {activeDriverTelemetry ? activeDriverTelemetry.driverName : 'Brak aktywnego sygnału'}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
-              <span
-                className="font-digital"
-                style={{
-                  fontSize: '48px',
-                  fontWeight: 900,
-                  color: 'var(--f1-cyan)',
-                  textShadow: '0 0 16px rgba(0,240,255,0.3)',
-                }}
-              >
-                {activeDriverTelemetry ? Math.round(activeDriverTelemetry.speed) : 0}
-              </span>
-              <span style={{ fontSize: '16px', color: 'var(--text-secondary)', fontWeight: 800 }}>
-                KM/H
-              </span>
-            </div>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>km/h</span>
           </div>
 
           <div style={{ marginTop: '10px' }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              PRZECIĄŻENIE G-FORCE
-            </span>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Przeciążenie</div>
             <div
               style={{
                 width: '100%',
-                height: '8px',
+                height: '6px',
                 background: 'rgba(255,255,255,0.06)',
-                borderRadius: '4px',
-                marginTop: '6px',
+                borderRadius: '3px',
+                marginTop: '4px',
                 overflow: 'hidden',
               }}
             >
               <div
                 style={{
                   height: '100%',
-                  width: `${Math.min((activeDriverTelemetry?.gForce || 0) / 2, 1) * 100}%`,
-                  background: 'var(--f1-purple)',
-                  transition: 'width 0.15s ease-out',
+                  width: `${Math.min((activeDriverTelemetry?.gForce || 0) / 1.5, 1) * 100}%`,
+                  background: 'var(--accent-blue)',
+                  transition: 'width 0.2s ease',
                 }}
               />
             </div>
           </div>
         </div>
 
-        {/* Global Track Radar Map Card */}
+        {/* Mini Map */}
         <div
-          className="telemetry-card"
-          style={{ padding: 0, overflow: 'hidden', minHeight: '260px', position: 'relative' }}
+          className="clean-card"
+          style={{ padding: 0, overflow: 'hidden', minHeight: '180px', position: 'relative' }}
         >
           <div
             style={{
               position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
+              top: '10px',
+              left: '12px',
               zIndex: 1000,
-              background: 'linear-gradient(rgba(5,7,12,0.85), transparent)',
-              padding: '14px 18px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
+              fontSize: '11px',
+              fontWeight: 600,
+              color: '#ffffff',
+              background: 'rgba(9, 10, 15, 0.8)',
+              padding: '3px 8px',
+              borderRadius: 'var(--radius-xs)',
             }}
           >
-            <h3 style={{ margin: 0, fontSize: '12px', fontWeight: 800, color: '#ffffff' }}>
-              RADAR SATELITARNY NA ŻYWO
-            </h3>
-            <span style={{ fontSize: '10px', color: 'var(--f1-cyan)', fontWeight: 800 }}>
-              ● 60FPS TRACKING
-            </span>
+            Podgląd toru
           </div>
-          <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+          <div ref={mapRef} style={{ width: '100%', height: '100%', minHeight: '180px' }} />
         </div>
       </div>
 
-      {/* F1 Broadcast Timing Tower */}
-      <div className="telemetry-card" style={{ padding: '24px' }}>
+      {/* Leaderboard Table Card */}
+      <div className="clean-card" style={{ padding: '20px' }}>
         <div
-          className="card-header"
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '16px',
+            flexWrap: 'wrap',
+            gap: '10px',
+          }}
         >
-          <div>
-            <h3 style={{ margin: 0 }}>TABLICA WYNIKÓW (LIVE TIMING TOWER)</h3>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-              Kliknij wiersz kierowcy, aby otworzyć panel Live Telemetry Focus
-            </span>
-          </div>
+          <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#ffffff', margin: 0 }}>
+            Tabela wyników
+          </h2>
 
           <div
             style={{
               display: 'flex',
-              gap: '6px',
-              background: 'rgba(0,0,0,0.5)',
-              padding: '4px',
+              background: 'rgba(255, 255, 255, 0.04)',
+              padding: '3px',
               borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--border-subtle)',
             }}
@@ -967,50 +889,74 @@ export default function RaceControl() {
             <button
               onClick={() => setViewMode('leaderboard')}
               style={{
-                padding: '6px 14px',
-                fontSize: '11px',
-                borderRadius: 'var(--radius-xs)',
-                background: viewMode === 'leaderboard' ? 'var(--f1-cyan)' : 'transparent',
-                color: viewMode === 'leaderboard' ? '#050608' : 'var(--text-secondary)',
-                fontWeight: 800,
+                padding: '5px 12px',
+                fontSize: '12px',
+                borderRadius: 'calc(var(--radius-sm) - 2px)',
+                background: viewMode === 'leaderboard' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                color: viewMode === 'leaderboard' ? '#ffffff' : 'var(--text-secondary)',
+                fontWeight: 600,
               }}
             >
-              🏆 KLASYFIKACJA (LIDERZY)
+              Najlepsze okrążenia
             </button>
             <button
               onClick={() => setViewMode('all')}
               style={{
-                padding: '6px 14px',
-                fontSize: '11px',
-                borderRadius: 'var(--radius-xs)',
-                background: viewMode === 'all' ? 'var(--f1-cyan)' : 'transparent',
-                color: viewMode === 'all' ? '#050608' : 'var(--text-secondary)',
-                fontWeight: 800,
+                padding: '5px 12px',
+                fontSize: '12px',
+                borderRadius: 'calc(var(--radius-sm) - 2px)',
+                background: viewMode === 'all' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                color: viewMode === 'all' ? '#ffffff' : 'var(--text-secondary)',
+                fontWeight: 600,
               }}
             >
-              📋 WSZYSTKIE OKRĄŻENIA ({laps.length})
+              Wszystkie ({laps.length})
             </button>
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto', marginTop: '10px' }}>
-          <table className="timing-table">
+        {/* Table */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
-              <tr>
-                <th style={{ width: '60px' }}>POS</th>
-                <th>KIEROWCA</th>
-                <th>SEKTOR 1</th>
-                <th>SEKTOR 2</th>
-                <th>SEKTOR 3</th>
-                <th>CZAS OKRĄŻENIA</th>
-                <th>V-MAX</th>
-                <th>STRATA (GAP)</th>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  #
+                </th>
+                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Kierowca
+                </th>
+                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  S1
+                </th>
+                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  S2
+                </th>
+                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  S3
+                </th>
+                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Czas okrążenia
+                </th>
+                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  V-Max
+                </th>
+                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Strata
+                </th>
               </tr>
             </thead>
             <tbody>
-              <AnimatePresence>
-                {displayedLaps.map((lap: any, index: number) => {
-                  const deltaToLeader = index === 0 ? null : lap.lapTime - bestLap.lapTime;
+              {displayedLaps.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                    Brak zarejestrowanych okrążeń na tym torze.
+                  </td>
+                </tr>
+              ) : (
+                displayedLaps.map((lap: any, index: number) => {
+                  const deltaToLeader =
+                    index === 0 || !bestLap ? null : (lap.lapTime - bestLap.lapTime) / 1000;
                   const isFocused = focusedDriver === lap.driverName;
                   const pBest = sectorStats.personalMap.get(lap.driverName);
 
@@ -1019,229 +965,54 @@ export default function RaceControl() {
                   const s3Class = getSectorBadgeClass(lap.s3, pBest?.s3, sectorStats.overallS3);
 
                   return (
-                    <React.Fragment key={lap._id}>
-                      <motion.tr
-                        layout
-                        onClick={() => setFocusedDriver(isFocused ? null : lap.driverName)}
-                        initial={{ opacity: 0, y: 15 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{ duration: 0.2 }}
-                        style={{
-                          background: isFocused
-                            ? 'rgba(0, 240, 255, 0.12)'
-                            : index === 0
-                            ? 'rgba(189, 52, 254, 0.08)'
-                            : 'transparent',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <td style={{ fontWeight: 900, fontSize: '15px' }} className="font-digital">
-                          {index === 0 ? (
-                            <span style={{ color: '#fbbf24' }}>🥇 1</span>
-                          ) : index === 1 ? (
-                            <span style={{ color: '#e2e8f0' }}>🥈 2</span>
-                          ) : index === 2 ? (
-                            <span style={{ color: '#b45309' }}>🥉 3</span>
-                          ) : (
-                            index + 1
-                          )}
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontWeight: 800, fontSize: '14px', color: '#fff' }}>
-                              {lap.driverName}
-                            </span>
-                            <span
-                              style={{
-                                fontSize: '10px',
-                                color: 'var(--text-muted)',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                background: 'rgba(255,255,255,0.04)',
-                              }}
-                            >
-                              #{lap.lapNumber || 1}
-                            </span>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`sector-badge ${s1Class}`}>
-                            {lap.s1 ? (lap.s1 / 1000).toFixed(3) : '---'}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`sector-badge ${s2Class}`}>
-                            {lap.s2 ? (lap.s2 / 1000).toFixed(3) : '---'}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`sector-badge ${s3Class}`}>
-                            {lap.s3 ? (lap.s3 / 1000).toFixed(3) : '---'}
-                          </span>
-                        </td>
-                        <td className="font-digital" style={{ fontWeight: 800, fontSize: '15px' }}>
-                          <span style={{ color: index === 0 ? 'var(--f1-purple)' : 'var(--f1-green)' }}>
-                            {(lap.lapTime / 1000).toFixed(3)}s
-                          </span>
-                        </td>
-                        <td className="font-digital" style={{ color: 'var(--f1-cyan)', fontWeight: 700 }}>
-                          {Math.round(lap.topSpeed || 0)} km/h
-                        </td>
-                        <td className="font-digital" style={{ fontWeight: 800 }}>
-                          {deltaToLeader ? (
-                            <span style={{ color: 'var(--f1-red)' }}>
-                              +{(deltaToLeader / 1000).toFixed(3)}s
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--f1-purple)' }}>LIDER</span>
-                          )}
-                        </td>
-                      </motion.tr>
-
-                      {/* Focused Driver In-depth Inspection Row */}
-                      <AnimatePresence>
-                        {isFocused && (
-                          <motion.tr
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                          >
-                            <td colSpan={8} style={{ padding: 0, border: 'none' }}>
-                              <div
-                                style={{
-                                  background: 'rgba(5, 7, 14, 0.95)',
-                                  borderBottom: '1px solid var(--border-subtle)',
-                                  padding: '20px',
-                                  display: 'flex',
-                                  gap: '20px',
-                                  flexWrap: 'wrap',
-                                }}
-                              >
-                                <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                  <h4 style={{ color: 'var(--f1-cyan)', margin: 0, fontSize: '14px', letterSpacing: '0.06em' }}>
-                                    LIVE TELEMETRY FOCUS: {focusedDriver}
-                                  </h4>
-                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                                    <div className="telemetry-card-inner" style={{ textAlign: 'center', padding: '12px' }}>
-                                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>PRĘDKOŚĆ (LIVE)</div>
-                                      <div className="font-digital" style={{ fontSize: '32px', color: 'var(--f1-cyan)', fontWeight: 800 }}>
-                                        {focusedTelemetry ? Math.round(focusedTelemetry.speed) : 0}{' '}
-                                        <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>km/h</span>
-                                      </div>
-                                    </div>
-
-                                    <div className="telemetry-card-inner" style={{ textAlign: 'center', padding: '12px' }}>
-                                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>G-FORCE (LIVE)</div>
-                                      <div className="font-digital" style={{ fontSize: '32px', color: 'var(--f1-purple)', fontWeight: 800 }}>
-                                        {focusedTelemetry ? (focusedTelemetry.gForce || 0).toFixed(2) : '0.00'}{' '}
-                                        <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>G</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="telemetry-card-inner" style={{ padding: '12px' }}>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                                      REKORDY SEKTORÓW KIEROWCY
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }} className="font-digital">
-                                      <div>
-                                        <span style={{ color: 'var(--text-muted)' }}>S1: </span>
-                                        {(focusedLapData as any).s1
-                                          ? ((focusedLapData as any).s1 / 1000).toFixed(3)
-                                          : '---'}s
-                                      </div>
-                                      <div>
-                                        <span style={{ color: 'var(--text-muted)' }}>S2: </span>
-                                        {(focusedLapData as any).s2
-                                          ? ((focusedLapData as any).s2 / 1000).toFixed(3)
-                                          : '---'}s
-                                      </div>
-                                      <div>
-                                        <span style={{ color: 'var(--text-muted)' }}>S3: </span>
-                                        {(focusedLapData as any).s3
-                                          ? ((focusedLapData as any).s3 / 1000).toFixed(3)
-                                          : '---'}s
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div
-                                  style={{
-                                    flex: '1 1 340px',
-                                    minHeight: '220px',
-                                    position: 'relative',
-                                    borderRadius: 'var(--radius-md)',
-                                    overflow: 'hidden',
-                                    border: '1px solid var(--border-subtle)',
-                                  }}
-                                >
-                                  <div ref={focusMapRef} style={{ width: '100%', height: '100%' }} />
-                                </div>
-                              </div>
-                            </td>
-                          </motion.tr>
-                        )}
-                      </AnimatePresence>
-                    </React.Fragment>
+                    <motion.tr
+                      key={lap._id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      onClick={() => setFocusedDriver(isFocused ? null : lap.driverName)}
+                      style={{
+                        borderBottom: '1px solid var(--border-subtle)',
+                        background: isFocused ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+                        cursor: 'pointer',
+                        transition: 'background 0.12s ease',
+                      }}
+                    >
+                      <td style={{ padding: '12px', fontSize: '13px', fontWeight: 700, color: index === 0 ? 'var(--accent-green)' : 'var(--text-secondary)' }} className="font-digital">
+                        {index + 1}
+                      </td>
+                      <td style={{ padding: '12px', fontSize: '13px', fontWeight: 600, color: '#ffffff' }}>
+                        {lap.driverName}
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <span className={`sector-badge ${s1Class}`}>
+                          {lap.s1 ? (lap.s1 / 1000).toFixed(3) : '--'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <span className={`sector-badge ${s2Class}`}>
+                          {lap.s2 ? (lap.s2 / 1000).toFixed(3) : '--'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <span className={`sector-badge ${s3Class}`}>
+                          {lap.s3 ? (lap.s3 / 1000).toFixed(3) : '--'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', fontSize: '14px', fontWeight: 700, color: index === 0 ? 'var(--accent-green)' : '#ffffff' }} className="font-digital">
+                        {(lap.lapTime / 1000).toFixed(3)}s
+                      </td>
+                      <td style={{ padding: '12px', fontSize: '12px', color: 'var(--text-secondary)' }} className="font-digital">
+                        {lap.topSpeed ? `${Math.round(lap.topSpeed)} km/h` : '--'}
+                      </td>
+                      <td style={{ padding: '12px', fontSize: '12px', color: 'var(--text-muted)' }} className="font-digital">
+                        {deltaToLeader === null ? 'Lider' : `+${deltaToLeader.toFixed(3)}s`}
+                      </td>
+                    </motion.tr>
                   );
-                })}
-              </AnimatePresence>
-
-              {inProgressDrivers.map((t: any) => (
-                <tr key={`in-progress-${t.driverName}`} style={{ background: 'rgba(0, 240, 255, 0.04)' }}>
-                  <td className="font-digital" style={{ color: 'var(--text-muted)' }}>—</td>
-                  <td style={{ fontWeight: 800, color: '#ffffff' }}>{t.driverName}</td>
-                  <td style={{ color: 'var(--text-muted)' }}>---</td>
-                  <td style={{ color: 'var(--text-muted)' }}>---</td>
-                  <td style={{ color: 'var(--text-muted)' }}>---</td>
-                  <td style={{ color: 'var(--f1-cyan)', fontWeight: 800, fontSize: '12px' }}>
-                    W TRAKCIE OKRĄŻENIA...
-                  </td>
-                  <td className="font-digital" style={{ color: 'var(--f1-cyan)' }}>
-                    {Math.round(t.speed || 0)} km/h
-                  </td>
-                  <td style={{ color: 'var(--text-muted)' }}>—</td>
-                </tr>
-              ))}
-
-              {displayedLaps.length === 0 && inProgressDrivers.length === 0 && (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
-                    Brak zarejestrowanych okrążeń w wybranej kategorii.
-                  </td>
-                </tr>
+                })
               )}
             </tbody>
           </table>
-        </div>
-
-        {/* Legend */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '20px',
-            marginTop: '16px',
-            paddingTop: '14px',
-            borderTop: '1px solid var(--border-subtle)',
-            fontSize: '11px',
-            color: 'var(--text-secondary)',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--f1-purple)' }} />
-            <span>🟣 Rekord Sesji (Overall Best)</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--f1-green)' }} />
-            <span>🟢 Rekord Osobisty (Personal Best)</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--f1-yellow)' }} />
-            <span>🟡 Słabszy sektor</span>
-          </div>
         </div>
       </div>
     </div>
